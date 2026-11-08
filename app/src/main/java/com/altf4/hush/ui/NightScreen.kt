@@ -35,9 +35,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.alpha
 import com.altf4.hush.block.BlockerState
+import com.altf4.hush.block.EmergencyPass
 import com.altf4.hush.data.Prefs
 import com.altf4.hush.data.Schedule
+import com.altf4.hush.data.SetupChecklist
+import com.altf4.hush.data.SetupItem
 import com.altf4.hush.data.ThemeMode
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -71,15 +75,23 @@ fun NightScreen(
     prefs: Prefs,
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
+    protectionOn: Boolean,
+    onProtectionChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(prefs.nightEnabled) }
     var start by remember { mutableIntStateOf(prefs.nightStartMinutes) }
     var end by remember { mutableIntStateOf(prefs.nightEndMinutes) }
     var days by remember { mutableIntStateOf(prefs.nightDays) }
+    var strict by remember { mutableStateOf(prefs.strictMode) }
+    val appCount = remember { prefs.blockedApps().size }
 
     val schedule = Schedule(enabled, start, end, days)
     val status = remember(enabled, start, end, days) { describe(schedule, ZonedDateTime.now()) }
+    // While the window runs, settings can only get stricter (see SettingsLock). Prefs enforces it too.
+    val locked = remember(enabled, start, end, days, strict) { prefs.isLocked() }
+
+    val checklist = SetupChecklist.items(protectionOn, BlockerState.running, appCount, enabled)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -87,6 +99,38 @@ fun NightScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { ScreenHeader("Night lock", "Quiet hours for the apps you choose.") }
+
+        if (!SetupChecklist.isComplete(checklist)) {
+            item {
+                SetupCard(
+                    items = checklist,
+                    actions = mapOf(
+                        SetupItem.Id.Protection to ("Turn on" to { onProtectionChange(true) }),
+                        SetupItem.Id.Accessibility to (
+                            "Open" to { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                            ),
+                    ),
+                )
+            }
+        }
+
+        if (locked) {
+            item {
+                HushCard {
+                    Text(
+                        text = "Locked until the window ends",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "The schedule is frozen and apps cannot be removed. You can still add apps or turn on strict mode.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
 
         item {
             HushCard {
@@ -112,10 +156,8 @@ fun NightScreen(
                     }
                     Switch(
                         checked = enabled,
-                        onCheckedChange = {
-                            enabled = it
-                            prefs.nightEnabled = it
-                        },
+                        enabled = !locked,
+                        onCheckedChange = { if (prefs.setNightEnabled(it)) enabled = it },
                     )
                 }
             }
@@ -124,16 +166,14 @@ fun NightScreen(
         item {
             HushCard {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    TimeColumn("Starts", start, Modifier.weight(1f)) {
+                    TimeColumn("Starts", start, !locked, Modifier.weight(1f)) {
                         pickTime(context, start) { picked ->
-                            start = picked
-                            prefs.setNightWindow(start, end)
+                            if (prefs.setNightWindow(picked, end)) start = picked
                         }
                     }
-                    TimeColumn("Ends", end, Modifier.weight(1f)) {
+                    TimeColumn("Ends", end, !locked, Modifier.weight(1f)) {
                         pickTime(context, end) { picked ->
-                            end = picked
-                            prefs.setNightWindow(start, end)
+                            if (prefs.setNightWindow(start, picked)) end = picked
                         }
                     }
                 }
@@ -152,9 +192,9 @@ fun NightScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DAY_LETTERS.forEachIndexed { index, letter ->
                         val selected = (days and (1 shl index)) != 0
-                        DayToggle(letter, selected) {
-                            days = days xor (1 shl index)
-                            prefs.nightDays = days
+                        DayToggle(letter, selected, !locked) {
+                            val next = days xor (1 shl index)
+                            if (prefs.setNightDays(next)) days = next
                         }
                     }
                 }
@@ -191,6 +231,35 @@ fun NightScreen(
             }
         }
 
+        item {
+            HushCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "Strict mode",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "No emergency pass. Can only be turned off outside quiet hours.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = strict,
+                        enabled = !(locked && strict),
+                        onCheckedChange = { on ->
+                            if (prefs.setStrictMode(on)) {
+                                strict = on
+                                if (on) EmergencyPass.shared.clear()
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
         item { SectionLabel("Appearance") }
 
         item {
@@ -216,7 +285,7 @@ fun NightScreen(
 }
 
 @Composable
-private fun TimeColumn(label: String, minutes: Int, modifier: Modifier, onClick: () -> Unit) {
+private fun TimeColumn(label: String, minutes: Int, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Column(modifier) {
         Text(
             text = label.uppercase(),
@@ -224,22 +293,23 @@ private fun TimeColumn(label: String, minutes: Int, modifier: Modifier, onClick:
             color = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(8.dp))
-        FilledTonalButton(onClick = onClick) {
+        FilledTonalButton(onClick = onClick, enabled = enabled) {
             Text(formatMinutes(minutes), style = MaterialTheme.typography.titleMedium)
         }
     }
 }
 
 @Composable
-private fun DayToggle(letter: String, selected: Boolean, onClick: () -> Unit) {
+private fun DayToggle(letter: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val background = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
     val content = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         modifier = Modifier
             .size(36.dp)
+            .alpha(if (enabled) 1f else 0.5f)
             .clip(CircleShape)
             .background(background)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(text = letter, style = MaterialTheme.typography.labelLarge, color = content)

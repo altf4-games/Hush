@@ -125,6 +125,8 @@ private fun HushApp(
                             themeMode = it
                             prefs.themeMode = it
                         },
+                        protectionOn = VpnState.running,
+                        onProtectionChange = onProtectionChange,
                     )
                     HomeTab.Apps -> AppsScreen(prefs)
                     HomeTab.Sites -> SitesScreen(

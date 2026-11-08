@@ -41,6 +41,8 @@ fun AppsScreen(prefs: Prefs) {
     var blocked by remember { mutableStateOf(prefs.blockedApps()) }
     var apps by remember { mutableStateOf<List<AppEntry>?>(null) }
     var query by remember { mutableStateOf("") }
+    // While the quiet window runs, apps can be added but not removed (Prefs enforces it as well).
+    val locked = remember { prefs.isLocked() }
 
     // Icons and labels take a moment; load them off the main thread, once.
     LaunchedEffect(Unit) {
@@ -67,7 +69,11 @@ fun AppsScreen(prefs: Prefs) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = "Select all skips apps you usually need, like messages, maps and the clock. You can still tick them yourself.",
+                    text = if (locked) {
+                        "Locked until the window ends: apps can be added, not removed."
+                    } else {
+                        "Select all skips apps you usually need, like messages, maps and the clock. You can still tick them yourself."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
@@ -77,15 +83,14 @@ fun AppsScreen(prefs: Prefs) {
                         enabled = all != null,
                         onClick = {
                             val chosen = all.orEmpty().filter { !it.essential }.map { it.packageName }
-                            blocked = blocked + chosen
-                            prefs.setBlockedApps(blocked)
+                            val next = blocked + chosen
+                            if (prefs.setBlockedApps(next)) blocked = next
                         },
                     ) { Text("Select all") }
                     OutlinedButton(
-                        enabled = blocked.isNotEmpty(),
+                        enabled = blocked.isNotEmpty() && !locked,
                         onClick = {
-                            blocked = emptySet()
-                            prefs.setBlockedApps(blocked)
+                            if (prefs.setBlockedApps(emptySet())) blocked = emptySet()
                         },
                     ) { Text("Clear") }
                 }
@@ -117,9 +122,11 @@ fun AppsScreen(prefs: Prefs) {
                 AppRow(
                     app = app,
                     checked = app.packageName in blocked,
+                    canTurnOff = !locked,
                     onChange = { on ->
-                        blocked = if (on) blocked + app.packageName else blocked - app.packageName
-                        prefs.setAppBlocked(app.packageName, on)
+                        if (prefs.setAppBlocked(app.packageName, on)) {
+                            blocked = if (on) blocked + app.packageName else blocked - app.packageName
+                        }
                     },
                 )
             }
@@ -129,7 +136,7 @@ fun AppsScreen(prefs: Prefs) {
 }
 
 @Composable
-private fun AppRow(app: AppEntry, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun AppRow(app: AppEntry, checked: Boolean, canTurnOff: Boolean, onChange: (Boolean) -> Unit) {
     HushCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val icon = app.icon
@@ -157,7 +164,7 @@ private fun AppRow(app: AppEntry, checked: Boolean, onChange: (Boolean) -> Unit)
                     )
                 }
             }
-            Switch(checked = checked, onCheckedChange = onChange)
+            Switch(checked = checked, enabled = canTurnOff || !checked, onCheckedChange = onChange)
         }
     }
 }

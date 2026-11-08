@@ -59,6 +59,8 @@ fun SitesScreen(
         }
     }
 
+    val quietNow = remember { prefs.isLocked() }
+
     // Re-read the update details whenever an update starts or finishes.
     val updatedAt = remember(UpdateStatus.running) { prefs.listsUpdatedAt }
     val entryCount = remember(UpdateStatus.running) { prefs.listsEntryCount }
@@ -100,13 +102,23 @@ fun SitesScreen(
         item { ProtectionCard(prefs) }
 
         item { SectionLabel("Social sites") }
+        if (quietNow) {
+            item {
+                Text(
+                    text = "Quiet hours are running: these can be blocked more, not less, until they end.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+        }
         items(SocialSites.all, key = { it.id }) { site ->
             SocialRow(
                 site = site,
                 mode = modes[site.id] ?: SocialMode.Off,
                 onModeChange = { mode ->
-                    modes[site.id] = mode
-                    prefs.setSocialMode(site.id, mode)
+                    // Refused while the quiet window runs if it would block less.
+                    if (prefs.setSocialMode(site.id, mode)) modes[site.id] = mode
                 },
             )
         }

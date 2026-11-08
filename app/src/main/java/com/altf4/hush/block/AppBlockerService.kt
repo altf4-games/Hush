@@ -33,11 +33,17 @@ class AppBlockerService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val current = clock
-        if (!BlockDecision.shouldBlock(event.packageName?.toString(), packageName, blocked) { current.isActive() }) {
-            return
-        }
+        val opened = event.packageName?.toString()
+        val shouldBlock = BlockDecision.shouldBlock(
+            pkg = opened,
+            ownPackage = packageName,
+            blocked = blocked,
+            hasPass = { EmergencyPass.shared.isActive(it, SystemClock.elapsedRealtime()) },
+            nightActive = { current.isActive() },
+        )
+        if (!shouldBlock || opened == null) return
         performGlobalAction(GLOBAL_ACTION_HOME)
-        showBlockScreen()
+        showBlockScreen(opened)
     }
 
     override fun onInterrupt() {
@@ -65,7 +71,8 @@ class AppBlockerService : AccessibilityService() {
         BlockerState.update(false)
     }
 
-    private fun showBlockScreen() {
+    /** [opened] goes to our own block screen as a transient extra (for the emergency pass); never stored. */
+    private fun showBlockScreen(opened: String) {
         // One screen per burst of events; the user may bounce off several windows in a row.
         val now = SystemClock.elapsedRealtime()
         if (now - lastScreenAt < SCREEN_DEBOUNCE_MS) return
@@ -73,6 +80,7 @@ class AppBlockerService : AccessibilityService() {
         try {
             startActivity(
                 Intent(this, BlockActivity::class.java)
+                    .putExtra(BlockActivity.EXTRA_PACKAGE, opened)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION),
             )
         } catch (e: RuntimeException) {

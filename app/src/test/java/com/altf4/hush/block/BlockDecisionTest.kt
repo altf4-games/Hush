@@ -38,4 +38,25 @@ class BlockDecisionTest {
         BlockDecision.shouldBlock("com.example.video", own, chosen) { asked++; true }
         assertEquals(1, asked)
     }
+
+    @Test fun anAppWithAPassIsLetThrough() {
+        assertFalse(
+            BlockDecision.shouldBlock("com.example.social", own, chosen, { it == "com.example.social" }) { true },
+        )
+    }
+
+    @Test fun aPassForOneAppDoesNotCoverAnother() {
+        assertTrue(
+            BlockDecision.shouldBlock("com.example.video", own, chosen, { it == "com.example.social" }) { true },
+        )
+    }
+
+    @Test fun passIsOnlyAskedForChosenAppsInsideTheWindow() {
+        var asked = 0
+        BlockDecision.shouldBlock("com.example.maps", own, chosen, { asked++; false }) { true }
+        BlockDecision.shouldBlock("com.example.social", own, chosen, { asked++; false }) { false }
+        assertEquals(0, asked)
+        BlockDecision.shouldBlock("com.example.social", own, chosen, { asked++; false }) { true }
+        assertEquals(1, asked)
+    }
 }
