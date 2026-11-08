@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the dark theme background so launch does not flash white. -->
+    <color name="window_background">#0A0C10</color>
+    <color name="ic_launcher_background">#0A0C10</color>
+</resources>
