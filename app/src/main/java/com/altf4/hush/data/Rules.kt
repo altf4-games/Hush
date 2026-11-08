@@ -3,6 +3,7 @@ package com.altf4.hush.data
 import android.content.Context
 import com.altf4.hush.dns.Blocklist
 import com.altf4.hush.dns.DomainFilter
+import com.altf4.hush.dns.ListParser
 import com.altf4.hush.dns.ListStore
 import com.altf4.hush.dns.RegexRules
 
@@ -32,8 +33,10 @@ object Rules {
     fun build(context: Context, prefs: Prefs): DomainFilter {
         val own = ArrayList<String>(alwaysBlockedDomains({ prefs.socialMode(it) }, prefs.customBlocked()))
         if (prefs.blockBypass) own.addAll(BypassHosts.all)
+        val allowed = prefs.allowed()
         return DomainFilter(
-            allow = Blocklist.build(prefs.allowed()),
+            allow = Blocklist.build(allowed),
+            allowNames = allowed.mapNotNullTo(HashSet()) { ListParser.normalizeDomain(it) },
             block = listOf(Blocklist.build(own), ListStore.load(context)),
             allowRegex = RegexRules.of(prefs.regexAllow()),
             blockRegex = RegexRules.of(prefs.regexBlock()),

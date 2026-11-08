@@ -61,7 +61,7 @@
         <!-- Brings the DNS VPN back after a reboot or an app update, if it was on. -->
         <receiver
             android:name=".dns.BootReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
@@ -95,7 +95,7 @@
         <!-- Home screen widget: blocked count and an on/off button. -->
         <receiver
             android:name=".dns.HushWidget"
-            android:exported="true"
+            android:exported="false"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

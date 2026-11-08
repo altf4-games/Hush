@@ -23,8 +23,17 @@ import java.util.Arrays
 class Blocklist private constructor(private val hashes: LongBuffer) {
     val size: Int get() = hashes.limit()
 
-    /** True if [domain] or any parent with at least two labels is in the set. */
-    fun matches(domain: ByteArray, len: Int): Boolean {
+    /** Confirms a hash hit for the suffix `domain[start until end]`. Called only after a hash match. */
+    fun interface SuffixCheck {
+        fun confirm(domain: ByteArray, start: Int, end: Int): Boolean
+    }
+
+    /**
+     * True if [domain] or any parent with at least two labels is in the set. With a [check], a
+     * hash hit only counts if the check also confirms it, for lists where a hash collision crafted
+     * by someone else would be harmful (the allow list).
+     */
+    fun matches(domain: ByteArray, len: Int, check: SuffixCheck? = null): Boolean {
         if (hashes.limit() == 0 || len <= 0) return false
 
         var lastDot = -1
@@ -40,7 +49,7 @@ class Blocklist private constructor(private val hashes: LongBuffer) {
         // at least two labels.
         var start = 0
         while (start <= lastDot) {
-            if (contains(hash(domain, start, len))) return true
+            if (contains(hash(domain, start, len)) && (check == null || check.confirm(domain, start, len))) return true
             var i = start
             while (domain[i] != DOT) i++
             start = i + 1

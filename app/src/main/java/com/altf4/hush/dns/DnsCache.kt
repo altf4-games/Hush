@@ -1,7 +1,9 @@
 package com.altf4.hush.dns
 
+import java.security.SecureRandom
+
 /**
- * Small LRU of upstream replies. Keys are a 64-bit hash of the whole query (everything after the
+ * Small LRU of upstream replies. Keys are a keyed 64-bit hash of the whole query (everything after the
  * transaction id), so no domain text is kept and queries that differ in flags or EDNS options
  * never share an entry. Lifetime follows the records' TTL clamped to 30 s – 10 min.
  *
@@ -11,10 +13,18 @@ package com.altf4.hush.dns
 class DnsCache(
     private val maxEntries: Int = 512,
     private val clock: () -> Long = System::nanoTime,
+    seed0: Long = SecureRandom().nextLong(),
+    seed1: Long = SecureRandom().nextLong(),
 ) {
     private class Entry(val data: ByteArray, val expiresAtNanos: Long)
 
     private val lock = Any()
+
+    // Any app can send lookups for names it chooses, so the key must not be predictable: with an
+    // unkeyed hash an app could craft a name whose answer it controls that shares a cache slot with
+    // another name, and have the other name resolve to its address. The key is random per process.
+    private val hasher = SipHash24(seed0, seed1)
+    private val hasherLock = Any()
 
     private val map = object : LinkedHashMap<Long, Entry>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Entry>?): Boolean =
@@ -22,7 +32,8 @@ class DnsCache(
     }
 
     /** Cache key for the query `buf[off until off + len]`, ignoring its transaction id. */
-    fun key(buf: ByteArray, off: Int, len: Int): Long = Blocklist.hash(buf, off + 2, off + len)
+    fun key(buf: ByteArray, off: Int, len: Int): Long =
+        synchronized(hasherLock) { hasher.hash(buf, off + 2, off + len) }
 
     /** Stores a reply if it is cacheable. [response] holds the DNS message at `off until off + len`. */
     fun put(key: Long, response: ByteArray, off: Int, len: Int) {

@@ -25,6 +25,11 @@ class ProtectionTile : TileService() {
     }
 
     override fun onClick() {
+        // From a locked screen, ask for the unlock first so a found phone cannot be switched off.
+        if (isLocked) unlockAndRun { toggle() } else toggle()
+    }
+
+    private fun toggle() {
         val on = VpnState.running
         if (!on && ProtectionControl.needsConsent(this)) {
             openApp()
