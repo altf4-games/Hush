@@ -27,6 +27,8 @@ class TlsConnector(
     fun open(server: DotServer): Socket {
         val plain = Socket()
         try {
+            // The descriptor only exists once the socket is bound; protect() fails without it.
+            plain.bind(null)
             if (!protect(plain)) throw IOException("could not protect socket")
             plain.connect(InetSocketAddress(server.address, server.port), timeoutMs)
             plain.soTimeout = timeoutMs // bounds the handshake

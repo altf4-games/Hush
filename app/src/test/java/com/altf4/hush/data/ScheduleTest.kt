@@ -61,7 +61,8 @@ class ScheduleTest {
         val sundayOnly = Schedule(true, minutes(22), minutes(6), Schedule.bit(DayOfWeek.SUNDAY))
         assertTrue(sundayOnly.isActive(at(sun, 23, 0)))
         assertTrue(sundayOnly.isActive(at(7, 3, 0))) // Monday 2026-11-16
-        assertFalse(sundayOnly.isActive(at(mon, 3, 0))) // the Monday before
+        assertFalse(sundayOnly.isActive(at(tue, 3, 0))) // Monday's window belongs to Sunday only, so Tuesday is out
+        assertTrue(sundayOnly.isActive(at(mon, 3, 0))) // weekly: the Monday before is covered too
     }
 
     @Test fun neverActiveWhenOffEmptyOrZeroLength() {

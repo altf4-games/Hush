@@ -47,10 +47,10 @@ class SafeRegexTest {
     }
 
     @Test fun patternsThatBacktrackBadlyAreRejectedByTheTestRun() {
-        // Not caught by the nested-repetition screen, but exponential on a long run of one kind
-        // of character followed by a mismatch.
-        assertNotNull(SafeRegex.check("^(a|aa)+$"))
-        assertNotNull(SafeRegex.check("^([0-9]|[0-9][0-9])+$"))
+        // Not caught by the nested-repetition screen, but polynomial-time blow-up on any engine
+        // when the name has no "!" (newer JVMs optimise classic (a|aa)+ cases, so avoid those).
+        assertNotNull(SafeRegex.check(".*.*.*.*.*!"))
+        assertNotNull(SafeRegex.check(".*a.*a.*a.*a.*!"))
     }
 
     @Test fun compileOnlyReturnsVettedPatterns() {
