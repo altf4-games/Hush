@@ -8,7 +8,7 @@ import org.junit.Test
 class BlocklistTest {
     private fun Blocklist.blocks(name: String): Boolean {
         val bytes = name.toByteArray(Charsets.US_ASCII)
-        return isBlocked(bytes, bytes.size)
+        return matches(bytes, bytes.size)
     }
 
     private val list = Blocklist.build(listOf("ads.example.com", "tracker.net"))

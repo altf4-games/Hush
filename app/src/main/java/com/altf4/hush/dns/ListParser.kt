@@ -15,9 +15,33 @@ object ListParser {
         "ip6-allnodes", "ip6-allrouters", "ip6-allhosts",
     )
 
+    /**
+     * Reads every line from [reader], adds the hash of each valid domain to [sink], and returns
+     * how many domains were accepted. Domain text is never kept.
+     */
+    fun collect(reader: java.io.BufferedReader, format: ListFormat, sink: HashBuffer): Int {
+        var accepted = 0
+        while (true) {
+            val line = reader.readLine() ?: break
+            val domain = parseLine(line, format) ?: continue
+            sink.add(Blocklist.hash(domain))
+            accepted++
+        }
+        return accepted
+    }
+
     fun parseLine(line: String, format: ListFormat): String? = when (format) {
         ListFormat.Hosts -> parseHosts(line)
         ListFormat.Adblock -> parseAdblock(line)
+        ListFormat.Domains -> parseDomains(line)
+    }
+
+    /** One domain per line; `#` starts a comment and a leading `*.` is dropped. */
+    private fun parseDomains(raw: String): String? {
+        val hash = raw.indexOf('#')
+        var line = (if (hash >= 0) raw.substring(0, hash) else raw).trim()
+        if (line.startsWith("*.")) line = line.substring(2)
+        return normalizeDomain(line) // anything with spaces or other junk is rejected here
     }
 
     /** `0.0.0.0 domain [# comment]`. Only the first host on a line is used. */

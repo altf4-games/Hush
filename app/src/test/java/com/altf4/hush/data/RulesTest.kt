@@ -19,6 +19,12 @@ class RulesTest {
         assertFalse("reddit.com" in domains)
     }
 
+    @Test fun customSitesAreAlwaysIncluded() {
+        val domains = Rules.alwaysBlockedDomains({ SocialMode.Off }, listOf("example.com", "news.example.org"))
+        assertTrue("example.com" in domains)
+        assertTrue("news.example.org" in domains)
+    }
+
     @Test fun nothingIsBlockedWhenEverythingIsOff() {
         assertTrue(Rules.alwaysBlockedDomains { SocialMode.Off }.isEmpty())
     }

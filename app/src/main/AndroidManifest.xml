@@ -41,6 +41,12 @@
             </intent-filter>
         </service>
 
+        <!-- Opt-in weekly list update, started by the system only while charging on Wi-Fi. -->
+        <service
+            android:name=".dns.ListUpdateJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
     </application>
 
 </manifest>

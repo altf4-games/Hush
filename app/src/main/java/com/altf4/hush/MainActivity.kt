@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.altf4.hush.data.Prefs
 import com.altf4.hush.dns.DnsVpnService
+import com.altf4.hush.dns.ListUpdater
+import com.altf4.hush.dns.UpdateScheduler
 import com.altf4.hush.dns.VpnState
 import com.altf4.hush.ui.AppsScreen
 import com.altf4.hush.ui.HushTheme
@@ -45,11 +47,26 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == RESULT_OK) startVpn()
     }
 
+    private val prefs by lazy { Prefs(applicationContext) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val prefs = Prefs(applicationContext)
-        setContent { HushApp(prefs, onProtectionChange = ::setProtection) }
+        // Re-arm the weekly update if it is on (it does not survive a reboot on its own).
+        UpdateScheduler.sync(applicationContext, prefs.weeklyUpdate)
+        setContent {
+            HushApp(
+                prefs = prefs,
+                onProtectionChange = ::setProtection,
+                onUpdateNow = { ListUpdater.runAsync(applicationContext) },
+                onWeeklyChange = ::setWeekly,
+            )
+        }
+    }
+
+    private fun setWeekly(on: Boolean) {
+        prefs.weeklyUpdate = on
+        UpdateScheduler.sync(applicationContext, on)
     }
 
     private fun setProtection(on: Boolean) {
@@ -73,7 +90,12 @@ private enum class HomeTab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-private fun HushApp(prefs: Prefs, onProtectionChange: (Boolean) -> Unit) {
+private fun HushApp(
+    prefs: Prefs,
+    onProtectionChange: (Boolean) -> Unit,
+    onUpdateNow: () -> Unit,
+    onWeeklyChange: (Boolean) -> Unit,
+) {
     var themeMode by remember { mutableStateOf(prefs.themeMode) }
 
     HushTheme(themeMode) {
@@ -110,6 +132,8 @@ private fun HushApp(prefs: Prefs, onProtectionChange: (Boolean) -> Unit) {
                         prefs = prefs,
                         protectionOn = VpnState.running,
                         onProtectionChange = onProtectionChange,
+                        onUpdateNow = onUpdateNow,
+                        onWeeklyChange = onWeeklyChange,
                     )
                 }
             }

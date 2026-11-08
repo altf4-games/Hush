@@ -39,6 +39,73 @@ class Prefs(context: Context) {
     fun setSocialMode(id: String, mode: SocialMode) =
         edit(bump = true) { putString(K_SOCIAL_PREFIX + id, mode.key) }
 
+    /** Sites the user always blocks, as clean domains (see [DomainInput]). */
+    fun customBlocked(): Set<String> = stringSet(K_CUSTOM)
+
+    fun setCustomBlocked(domain: String, present: Boolean) = changeSet(K_CUSTOM, domain, present)
+
+    /** Sites that stay reachable even if a list or a custom rule blocks them. */
+    fun allowed(): Set<String> = stringSet(K_ALLOWED)
+
+    fun setAllowed(domain: String, present: Boolean) = changeSet(K_ALLOWED, domain, present)
+
+    /** Patterns (see SafeRegex) that block matching names. */
+    fun regexBlock(): Set<String> = stringSet(K_REGEX_BLOCK)
+
+    fun setRegexBlock(pattern: String, present: Boolean) = changeSet(K_REGEX_BLOCK, pattern, present)
+
+    /** Patterns that keep matching names reachable, overriding lists and block patterns. */
+    fun regexAllow(): Set<String> = stringSet(K_REGEX_ALLOW)
+
+    fun setRegexAllow(pattern: String, present: Boolean) = changeSet(K_REGEX_ALLOW, pattern, present)
+
+    /** Block names whose CNAME chain reaches a blocked domain (disguised trackers). On by default. */
+    var uncloakCname: Boolean
+        get() = sp.getBoolean(K_UNCLOAK, true)
+        set(value) = edit(bump = true) { putBoolean(K_UNCLOAK, value) }
+
+    /** Block public names that answer with private addresses (DNS rebinding). On by default. */
+    var blockRebinding: Boolean
+        get() = sp.getBoolean(K_REBINDING, true)
+        set(value) = edit(bump = true) { putBoolean(K_REBINDING, value) }
+
+    /** Block well-known encrypted-DNS provider names and the Firefox opt-out signal. Off by default. */
+    var blockBypass: Boolean
+        get() = sp.getBoolean(K_BYPASS, false)
+        set(value) = edit(bump = true) { putBoolean(K_BYPASS, value) }
+
+    /** Opt-in weekly list update (charging + unmetered network only). Off by default. */
+    var weeklyUpdate: Boolean
+        get() = sp.getBoolean(K_WEEKLY, false)
+        set(value) = edit(bump = false) { putBoolean(K_WEEKLY, value) }
+
+    /** When the lists were last downloaded (millis), or 0 if never. Shown in the UI. */
+    val listsUpdatedAt: Long get() = sp.getLong(K_LISTS_UPDATED, 0L)
+
+    /** Number of unique domains in the downloaded lists. */
+    val listsEntryCount: Int get() = sp.getInt(K_LISTS_COUNT, 0)
+
+    /** SHA-256 (hex) of the last download of a catalog list, or null. */
+    fun listSha(id: String): String? = sp.getString(K_SHA_PREFIX + id, null)
+
+    /** Records a finished update and bumps the version so the service reloads. */
+    fun commitListUpdate(updatedAt: Long, count: Int, shas: Map<String, String>) =
+        edit(bump = true) {
+            putLong(K_LISTS_UPDATED, updatedAt)
+            putInt(K_LISTS_COUNT, count)
+            for (source in ListCatalog.all) remove(K_SHA_PREFIX + source.id)
+            for ((id, sha) in shas) putString(K_SHA_PREFIX + id, sha)
+        }
+
+    private fun stringSet(key: String): Set<String> =
+        HashSet(sp.getStringSet(key, null) ?: emptySet())
+
+    private fun changeSet(key: String, value: String, present: Boolean) {
+        val next = HashSet(stringSet(key))
+        if (present) next.add(value) else next.remove(value)
+        edit(bump = true) { putStringSet(key, next) }
+    }
+
     /**
      * Calls [onChange] whenever a blocking-related setting changes (the version counter moves).
      * Event-driven: no polling. Close the returned handle to stop listening.
@@ -66,6 +133,17 @@ class Prefs(context: Context) {
         const val K_NIGHT_END = "night_end"
         const val K_LISTS = "lists_enabled"
         const val K_SOCIAL_PREFIX = "social_"
+        const val K_CUSTOM = "custom_blocked"
+        const val K_ALLOWED = "allowed"
+        const val K_WEEKLY = "weekly_update"
+        const val K_REGEX_BLOCK = "regex_block"
+        const val K_REGEX_ALLOW = "regex_allow"
+        const val K_UNCLOAK = "uncloak_cname"
+        const val K_REBINDING = "block_rebinding"
+        const val K_BYPASS = "block_bypass"
+        const val K_LISTS_UPDATED = "lists_updated_at"
+        const val K_LISTS_COUNT = "lists_count"
+        const val K_SHA_PREFIX = "sha_"
         const val DEFAULT_NIGHT_START = 23 * 60
         const val DEFAULT_NIGHT_END = 6 * 60
     }

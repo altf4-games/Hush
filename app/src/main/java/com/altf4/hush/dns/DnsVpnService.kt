@@ -15,29 +15,37 @@ import java.util.concurrent.TimeUnit
 /**
  * Local DNS-only VPN. Only the fake DNS address is routed into the tunnel, so all other traffic
  * bypasses it. One thread blocks on the tun read; blocked names are answered in place with
- * NXDOMAIN, everything else is forwarded by a small fixed pool. No timers, no polling.
+ * NXDOMAIN, cached answers are replied to in place, and everything else is forwarded to the
+ * upstream resolver over TLS by a small fixed pool. No timers, no polling.
  *
  * Domain names are never logged or stored.
  */
 class DnsVpnService : VpnService() {
-    @Volatile private var blocklist: Blocklist = Blocklist.EMPTY
+    @Volatile private var filter: DomainFilter = DomainFilter.EMPTY
     @Volatile private var running = false
 
     private var tun: ParcelFileDescriptor? = null
     private var reader: Thread? = null
     private var pool: ThreadPoolExecutor? = null
-    private var upstream: Upstream? = null
+    private var resolver: DotResolver? = null
     private var versionHandle: AutoCloseable? = null
 
+    private val cache = DnsCache()
     private val tunLock = Any()
     private val workerBuffer = ThreadLocal.withInitial { ByteArray(MAX_PACKET) }
+    private val workerScratch = ThreadLocal.withInitial { ByteArray(SCRATCH) }
 
     private class Forward(
         val srcIp: Int,
         val srcPort: Int,
         val dstIp: Int,
         val dstPort: Int,
+        val cacheKey: Long,
+        /** The query's DNS message and the offset just past its question within it. */
         val payload: ByteArray,
+        val questionEnd: Int,
+        /** Lowercase dotted name, kept only in memory for the lifetime of this lookup. */
+        val domain: ByteArray,
     )
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -79,11 +87,18 @@ class DnsVpnService : VpnService() {
         if (pfd == null) return false
 
         val prefs = Prefs(applicationContext)
-        blocklist = Rules.build(prefs)
-        // Settings changes bump a version counter; rebuild only when it changes.
-        versionHandle = prefs.registerVersionListener { blocklist = Rules.build(prefs) }
+        filter = Rules.build(applicationContext, prefs)
+        // Settings and list updates bump a version counter; rebuild only when it changes. Cached
+        // replies were vetted under the old rules, so they are dropped too.
+        versionHandle = prefs.registerVersionListener {
+            filter = Rules.build(applicationContext, prefs)
+            cache.clear()
+        }
+        // The tunnel restarts after reboot with Always-on VPN, which re-arms the weekly update.
+        UpdateScheduler.sync(applicationContext, prefs.weeklyUpdate)
 
-        upstream = Upstream(protect = { socket -> protect(socket) })
+        val connector = TlsConnector(protect = { socket -> protect(socket) })
+        resolver = DotResolver(DotResolver.DEFAULT_SERVERS, open = connector::open)
         pool = ThreadPoolExecutor(
             WORKERS, WORKERS, 0L, TimeUnit.MILLISECONDS,
             ArrayBlockingQueue<Runnable>(QUEUE),
@@ -107,8 +122,9 @@ class DnsVpnService : VpnService() {
         reader = null
         pool?.shutdownNow()
         pool = null
-        upstream?.close()
-        upstream = null
+        resolver?.close()
+        resolver = null
+        cache.clear()
         try {
             tun?.close() // also unblocks the reader's read()
         } catch (e: IOException) {
@@ -149,24 +165,62 @@ class DnsVpnService : VpnService() {
         if (!DnsPacket.parseQuery(buf, n, q)) return
         if (q.dstIp != DnsPacket.DNS_SERVER_IP || q.dstPort != DnsPacket.DNS_PORT) return
 
-        if (blocklist.isBlocked(q.domain, q.domainLen)) {
+        if (filter.isBlocked(q.domain, q.domainLen)) {
             writeTun(output, out, DnsPacket.buildBlockedPacket(buf, q, out))
             return
         }
 
+        // Answer from the cache without leaving the reader thread. Cached replies already passed
+        // every check below, and the cache is cleared whenever the rules change.
+        val key = cache.key(buf, q.dnsOffset, q.dnsLength)
+        val cachedLen = cache.get(key, buf[q.dnsOffset], buf[q.dnsOffset + 1], out, DnsPacket.HEADERS_LEN)
+        if (cachedLen > 0) {
+            val total = DnsPacket.finishPacket(out, q.dstIp, q.dstPort, q.srcIp, q.srcPort, cachedLen)
+            writeTun(output, out, total)
+            return
+        }
+
         val job = Forward(
-            q.srcIp, q.srcPort, q.dstIp, q.dstPort,
-            buf.copyOfRange(q.dnsOffset, q.dnsOffset + q.dnsLength),
+            srcIp = q.srcIp,
+            srcPort = q.srcPort,
+            dstIp = q.dstIp,
+            dstPort = q.dstPort,
+            cacheKey = key,
+            payload = buf.copyOfRange(q.dnsOffset, q.dnsOffset + q.dnsLength),
+            questionEnd = q.questionEnd - q.dnsOffset,
+            domain = q.domain.copyOf(q.domainLen),
         )
         pool?.execute { forward(job, output) }
     }
 
+    /** Runs on a worker: pattern check, encrypted lookup, reply checks, cache, answer. */
     private fun forward(job: Forward, output: FileOutputStream) {
         try {
-            val up = upstream ?: return
+            val rules = filter // one consistent snapshot for this lookup
             val out = workerBuffer.get()!!
-            val replyLen = up.resolve(job.payload, job.payload.size, out, DnsPacket.HEADERS_LEN)
-            if (replyLen <= 0) return
+
+            if (rules.isRegexBlocked(job.domain, job.domain.size)) {
+                replyError(job, out, output, DnsPacket.RCODE_NXDOMAIN)
+                return
+            }
+
+            val dot = resolver ?: return
+            val replyLen = dot.resolve(job.payload, job.payload.size, out, DnsPacket.HEADERS_LEN)
+            if (replyLen <= 0) {
+                // Fail closed: nothing is ever sent in cleartext. Answer SERVFAIL right away so
+                // apps fail fast instead of waiting out their own timeout.
+                replyError(job, out, output, DnsPacket.RCODE_SERVFAIL)
+                return
+            }
+
+            if (!rules.isAllowed(job.domain, job.domain.size) &&
+                ResponseGuard.shouldBlock(out, DnsPacket.HEADERS_LEN, replyLen, rules, workerScratch.get()!!)
+            ) {
+                replyError(job, out, output, DnsPacket.RCODE_NXDOMAIN)
+                return
+            }
+
+            cache.put(job.cacheKey, out, DnsPacket.HEADERS_LEN, replyLen)
             val total = DnsPacket.finishPacket(
                 out, job.dstIp, job.dstPort, job.srcIp, job.srcPort, replyLen,
             )
@@ -174,6 +228,15 @@ class DnsVpnService : VpnService() {
         } catch (e: RuntimeException) {
             // Drop this query; the resolver on the device will retry.
         }
+    }
+
+    private fun replyError(job: Forward, out: ByteArray, output: FileOutputStream, rcode: Int) {
+        val dnsLen = DnsPacket.writeErrorReply(
+            job.payload, 0, job.questionEnd, out, DnsPacket.HEADERS_LEN, rcode,
+        )
+        if (dnsLen == 0) return
+        val total = DnsPacket.finishPacket(out, job.dstIp, job.dstPort, job.srcIp, job.srcPort, dnsLen)
+        writeTun(output, out, total)
     }
 
     private fun writeTun(output: FileOutputStream, buf: ByteArray, len: Int) {
@@ -194,6 +257,7 @@ class DnsVpnService : VpnService() {
         // Only DNS crosses this interface, so a large MTU lets big UDP replies fit in one packet.
         private const val MTU = 4096
         private const val MAX_PACKET = MTU + 64
+        private const val SCRATCH = 256
         private const val WORKERS = 4
         private const val QUEUE = 256
     }

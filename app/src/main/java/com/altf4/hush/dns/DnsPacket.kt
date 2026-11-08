@@ -117,20 +117,44 @@ object DnsPacket {
      * question. Returns the packet length, or 0 if [out] is too small.
      */
     fun buildBlockedPacket(pkt: ByteArray, q: Query, out: ByteArray): Int {
-        val dnsLen = q.questionEnd - q.dnsOffset
-        if (HEADERS_LEN + dnsLen > out.size) return 0
-        val d = HEADERS_LEN
-        out[d] = pkt[q.dnsOffset]
-        out[d + 1] = pkt[q.dnsOffset + 1]
-        val rd = pkt[q.dnsOffset + 2].toInt() and 0x01
-        out[d + 2] = (0x80 or rd).toByte() // QR=1, opcode 0, AA=0, TC=0, RD copied
-        out[d + 3] = 0x83.toByte() // RA=1, RCODE=3 (NXDOMAIN)
-        out[d + 4] = 0
-        out[d + 5] = 1 // QDCOUNT = 1
-        for (i in 6 until DNS_HEADER_LEN) out[d + i] = 0
-        val questionLen = q.questionEnd - (q.dnsOffset + DNS_HEADER_LEN)
-        System.arraycopy(pkt, q.dnsOffset + DNS_HEADER_LEN, out, d + DNS_HEADER_LEN, questionLen)
+        val dnsLen = writeErrorReply(pkt, q.dnsOffset, q.questionEnd, out, HEADERS_LEN, RCODE_NXDOMAIN)
+        if (dnsLen == 0) return 0
         return finishPacket(out, q.dstIp, q.dstPort, q.srcIp, q.srcPort, dnsLen)
+    }
+
+    const val RCODE_SERVFAIL = 2
+    const val RCODE_NXDOMAIN = 3
+
+    /**
+     * Writes an error reply with response code [rcode] (NXDOMAIN to block, SERVFAIL when the
+     * upstream is unreachable) to the query at `src[srcOff until questionEnd]` (header plus its
+     * single question) into `out` at [outOff]. Returns the message length, or 0 if [out] is too
+     * small.
+     */
+    fun writeErrorReply(
+        src: ByteArray,
+        srcOff: Int,
+        questionEnd: Int,
+        out: ByteArray,
+        outOff: Int,
+        rcode: Int,
+    ): Int {
+        val dnsLen = questionEnd - srcOff
+        if (dnsLen < DNS_HEADER_LEN || outOff + dnsLen > out.size) return 0
+        out[outOff] = src[srcOff]
+        out[outOff + 1] = src[srcOff + 1]
+        val rd = src[srcOff + 2].toInt() and 0x01
+        out[outOff + 2] = (0x80 or rd).toByte() // QR=1, opcode 0, AA=0, TC=0, RD copied
+        out[outOff + 3] = (0x80 or (rcode and 0x0F)).toByte() // RA=1, then the response code
+        out[outOff + 4] = 0
+        out[outOff + 5] = 1 // QDCOUNT = 1
+        for (i in 6 until DNS_HEADER_LEN) out[outOff + i] = 0
+        System.arraycopy(
+            src, srcOff + DNS_HEADER_LEN,
+            out, outOff + DNS_HEADER_LEN,
+            dnsLen - DNS_HEADER_LEN,
+        )
+        return dnsLen
     }
 
     /**
