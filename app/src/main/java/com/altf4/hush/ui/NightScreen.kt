@@ -77,6 +77,7 @@ fun NightScreen(
     onThemeChange: (ThemeMode) -> Unit,
     protectionOn: Boolean,
     onProtectionChange: (Boolean) -> Unit,
+    onRestored: () -> Unit,
 ) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(prefs.nightEnabled) }
@@ -259,6 +260,10 @@ fun NightScreen(
                 }
             }
         }
+
+        item { SectionLabel("Backup") }
+
+        item { BackupCard(prefs, onRestored) }
 
         item { SectionLabel("Appearance") }
 

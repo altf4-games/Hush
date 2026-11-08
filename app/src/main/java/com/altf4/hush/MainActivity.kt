@@ -22,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.altf4.hush.block.EmergencyPass
 import com.altf4.hush.data.Prefs
 import com.altf4.hush.dns.DnsVpnService
 import com.altf4.hush.dns.ListUpdater
@@ -97,6 +99,8 @@ private fun HushApp(
     onWeeklyChange: (Boolean) -> Unit,
 ) {
     var themeMode by remember { mutableStateOf(prefs.themeMode) }
+    // Bumped after settings are loaded from a file, so every screen re-reads them.
+    var restoreCount by remember { mutableIntStateOf(0) }
 
     HushTheme(themeMode) {
         var selected by rememberSaveable { mutableIntStateOf(0) }
@@ -117,25 +121,35 @@ private fun HushApp(
             },
         ) { inner ->
             Box(Modifier.fillMaxSize().padding(inner)) {
-                when (HomeTab.entries[selected]) {
-                    HomeTab.Night -> NightScreen(
-                        prefs = prefs,
-                        themeMode = themeMode,
-                        onThemeChange = {
-                            themeMode = it
-                            prefs.themeMode = it
-                        },
-                        protectionOn = VpnState.running,
-                        onProtectionChange = onProtectionChange,
-                    )
-                    HomeTab.Apps -> AppsScreen(prefs)
-                    HomeTab.Sites -> SitesScreen(
-                        prefs = prefs,
-                        protectionOn = VpnState.running,
-                        onProtectionChange = onProtectionChange,
-                        onUpdateNow = onUpdateNow,
-                        onWeeklyChange = onWeeklyChange,
-                    )
+                key(restoreCount) {
+                    when (HomeTab.entries[selected]) {
+                        HomeTab.Night -> NightScreen(
+                            prefs = prefs,
+                            themeMode = themeMode,
+                            onThemeChange = {
+                                themeMode = it
+                                prefs.themeMode = it
+                            },
+                            protectionOn = VpnState.running,
+                            onProtectionChange = onProtectionChange,
+                            onRestored = {
+                                // Settings were replaced from a file: refresh what the screens and
+                                // services hold, and re-arm the weekly update if it is now on.
+                                themeMode = prefs.themeMode
+                                if (prefs.strictMode) EmergencyPass.shared.clear()
+                                onWeeklyChange(prefs.weeklyUpdate)
+                                restoreCount++
+                            },
+                        )
+                        HomeTab.Apps -> AppsScreen(prefs)
+                        HomeTab.Sites -> SitesScreen(
+                            prefs = prefs,
+                            protectionOn = VpnState.running,
+                            onProtectionChange = onProtectionChange,
+                            onUpdateNow = onUpdateNow,
+                            onWeeklyChange = onWeeklyChange,
+                        )
+                    }
                 }
             }
         }

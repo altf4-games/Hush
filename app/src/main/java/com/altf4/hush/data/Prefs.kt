@@ -163,6 +163,56 @@ class Prefs(context: Context) {
             for ((id, sha) in shas) putString(K_SHA_PREFIX + id, sha)
         }
 
+    /** Everything that goes into a backup file. */
+    fun snapshot(): SettingsSnapshot = SettingsSnapshot(
+        theme = themeMode,
+        nightEnabled = nightEnabled,
+        nightStart = nightStartMinutes,
+        nightEnd = nightEndMinutes,
+        nightDays = nightDays,
+        strict = strictMode,
+        apps = blockedApps(),
+        social = SocialSites.all.associate { it.id to socialMode(it.id) },
+        custom = customBlocked(),
+        allowed = allowed(),
+        regexBlock = regexBlock(),
+        regexAllow = regexAllow(),
+        lists = enabledLists(),
+        uncloak = uncloakCname,
+        rebinding = blockRebinding,
+        bypass = blockBypass,
+        weekly = weeklyUpdate,
+    )
+
+    /**
+     * Replaces every setting in one step (one version bump). Refused while the quiet window is
+     * running, because a backup could otherwise be used to undo the lock. The snapshot must come
+     * from [SettingsBackup.decode], which has already checked every value.
+     */
+    fun restore(s: SettingsSnapshot): Boolean {
+        if (isLocked()) return false
+        edit(bump = true) {
+            putString(K_THEME, s.theme.key)
+            putBoolean(K_NIGHT_ON, s.nightEnabled)
+            putInt(K_NIGHT_START, s.nightStart)
+            putInt(K_NIGHT_END, s.nightEnd)
+            putInt(K_NIGHT_DAYS, s.nightDays and Schedule.ALL_DAYS)
+            putBoolean(K_STRICT, s.strict)
+            putStringSet(K_APPS, HashSet(s.apps))
+            for ((id, mode) in s.social) putString(K_SOCIAL_PREFIX + id, mode.key)
+            putStringSet(K_CUSTOM, HashSet(s.custom))
+            putStringSet(K_ALLOWED, HashSet(s.allowed))
+            putStringSet(K_REGEX_BLOCK, HashSet(s.regexBlock))
+            putStringSet(K_REGEX_ALLOW, HashSet(s.regexAllow))
+            putStringSet(K_LISTS, HashSet(s.lists))
+            putBoolean(K_UNCLOAK, s.uncloak)
+            putBoolean(K_REBINDING, s.rebinding)
+            putBoolean(K_BYPASS, s.bypass)
+            putBoolean(K_WEEKLY, s.weekly)
+        }
+        return true
+    }
+
     private fun stringSet(key: String): Set<String> =
         HashSet(sp.getStringSet(key, null) ?: emptySet())
 
