@@ -31,7 +31,11 @@ import com.altf4.hush.dns.BlockListSource
 import com.altf4.hush.dns.ListCatalog
 
 @Composable
-fun SitesScreen(prefs: Prefs) {
+fun SitesScreen(
+    prefs: Prefs,
+    protectionOn: Boolean,
+    onProtectionChange: (Boolean) -> Unit,
+) {
     var enabledLists by remember { mutableStateOf(prefs.enabledLists()) }
     val modes = remember {
         mutableStateMapOf<String, SocialMode>().apply {
@@ -45,6 +49,32 @@ fun SitesScreen(prefs: Prefs) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { ScreenHeader("Sites", "Block ads and distracting sites in every app and browser.") }
+
+        item {
+            HushCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "Site blocking",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = if (protectionOn) "On" else "Off. Turn on to apply the choices below.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = protectionOn, onCheckedChange = onProtectionChange)
+                }
+                Text(
+                    text = "Turn off Secure DNS in your browser and Private DNS in system settings, or they bypass this.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+        }
 
         item { SectionLabel("Social sites") }
         items(SocialSites.all, key = { it.id }) { site ->

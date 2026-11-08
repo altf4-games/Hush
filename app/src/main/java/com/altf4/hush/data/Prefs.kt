@@ -39,6 +39,18 @@ class Prefs(context: Context) {
     fun setSocialMode(id: String, mode: SocialMode) =
         edit(bump = true) { putString(K_SOCIAL_PREFIX + id, mode.key) }
 
+    /**
+     * Calls [onChange] whenever a blocking-related setting changes (the version counter moves).
+     * Event-driven: no polling. Close the returned handle to stop listening.
+     */
+    fun registerVersionListener(onChange: () -> Unit): AutoCloseable {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == K_VERSION) onChange()
+        }
+        sp.registerOnSharedPreferenceChangeListener(listener)
+        return AutoCloseable { sp.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     private inline fun edit(bump: Boolean, block: SharedPreferences.Editor.() -> Unit) {
         val editor = sp.edit()
         editor.block()

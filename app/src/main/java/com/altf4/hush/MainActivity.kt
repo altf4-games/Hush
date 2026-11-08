@@ -1,9 +1,12 @@
 package com.altf4.hush
 
+import android.content.Intent
+import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -27,17 +30,39 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.altf4.hush.data.Prefs
+import com.altf4.hush.dns.DnsVpnService
+import com.altf4.hush.dns.VpnState
 import com.altf4.hush.ui.AppsScreen
 import com.altf4.hush.ui.HushTheme
 import com.altf4.hush.ui.NightScreen
 import com.altf4.hush.ui.SitesScreen
 
 class MainActivity : ComponentActivity() {
+    // The system asks the user once to allow the VPN; start the service if they accept.
+    private val vpnConsent = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == RESULT_OK) startVpn()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val prefs = Prefs(applicationContext)
-        setContent { HushApp(prefs) }
+        setContent { HushApp(prefs, onProtectionChange = ::setProtection) }
+    }
+
+    private fun setProtection(on: Boolean) {
+        if (!on) {
+            startService(Intent(this, DnsVpnService::class.java).setAction(DnsVpnService.ACTION_STOP))
+            return
+        }
+        val consent = VpnService.prepare(this)
+        if (consent != null) vpnConsent.launch(consent) else startVpn()
+    }
+
+    private fun startVpn() {
+        startService(Intent(this, DnsVpnService::class.java))
     }
 }
 
@@ -48,7 +73,7 @@ private enum class HomeTab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-private fun HushApp(prefs: Prefs) {
+private fun HushApp(prefs: Prefs, onProtectionChange: (Boolean) -> Unit) {
     var themeMode by remember { mutableStateOf(prefs.themeMode) }
 
     HushTheme(themeMode) {
@@ -81,7 +106,11 @@ private fun HushApp(prefs: Prefs) {
                         },
                     )
                     HomeTab.Apps -> AppsScreen()
-                    HomeTab.Sites -> SitesScreen(prefs)
+                    HomeTab.Sites -> SitesScreen(
+                        prefs = prefs,
+                        protectionOn = VpnState.running,
+                        onProtectionChange = onProtectionChange,
+                    )
                 }
             }
         }
