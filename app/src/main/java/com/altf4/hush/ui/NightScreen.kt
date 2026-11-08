@@ -1,5 +1,7 @@
 package com.altf4.hush.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
@@ -86,8 +88,8 @@ fun NightScreen(prefs: Prefs) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(CardGap),
     ) {
         item { ScreenHeader("Night lock", "Quiet hours for the apps you choose.") }
 
@@ -110,18 +112,18 @@ fun NightScreen(prefs: Prefs) {
         }
 
         item {
-            HushCard {
+            HushCard(shape = MaterialTheme.shapes.extraLarge) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(end = 12.dp)) {
                         Text(
-                            text = "QUIET WINDOW",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            text = "Quiet window",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
                             text = "${formatMinutes(start)} – ${formatMinutes(end)}",
-                            style = MaterialTheme.typography.displaySmall,
+                            style = MaterialTheme.typography.displayMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(Modifier.height(4.dp))
@@ -161,9 +163,9 @@ fun NightScreen(prefs: Prefs) {
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 Text(
-                    text = "WINDOW STARTS ON",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    text = "Starts on",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -181,61 +183,39 @@ fun NightScreen(prefs: Prefs) {
         item { SectionLabel("App closing") }
 
         item {
-            HushCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                        Text(
-                            text = "Accessibility service",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = if (BlockerState.running) "On" else "Off. Turn on Hush in Accessibility settings.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Button(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
-                        Text("Open")
-                    }
-                }
-                Text(
-                    text = "It only notices which app opened and cannot read the screen. If the switch is greyed out, open Hush's app info, tap the menu and choose Allow restricted settings.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp),
+            ListGroup {
+                GroupRow(
+                    title = "Accessibility service",
+                    subtitle = if (BlockerState.running) "On. Hush can close the apps you chose." else "Off. Needed to close apps at night.",
+                    leading = { IconBadge(HushIcons.Accessibility) },
+                    trailing = {
+                        if (BlockerState.running) {
+                            StatusPill("On", statusColors.protected, statusColors.protectedContainer)
+                        } else {
+                            Button(onClick = { openAccessibilitySettings(context) }) { Text("Open") }
+                        }
+                    },
+                )
+                GroupDivider()
+                SwitchRow(
+                    title = "Strict mode",
+                    subtitle = "No emergency pass. Can only be turned off outside quiet hours.",
+                    checked = strict,
+                    enabled = !(locked && strict),
+                    leading = { IconBadge(Icons.Filled.Lock) },
+                    onChange = { on ->
+                        if (prefs.setStrictMode(on)) {
+                            strict = on
+                            if (on) EmergencyPass.shared.clear()
+                        }
+                    },
                 )
             }
         }
-
         item {
-            HushCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                        Text(
-                            text = "Strict mode",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "No emergency pass. Can only be turned off outside quiet hours.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = strict,
-                        enabled = !(locked && strict),
-                        onCheckedChange = { on ->
-                            if (prefs.setStrictMode(on)) {
-                                strict = on
-                                if (on) EmergencyPass.shared.clear()
-                            }
-                        },
-                    )
-                }
-            }
+            Footnote("The service only notices which app opened and cannot read the screen. If its switch is greyed out, open Hush's App info, tap ⋮ and choose Allow restricted settings.")
         }
+        item { Spacer(Modifier.height(16.dp)) }
     }
 }
 

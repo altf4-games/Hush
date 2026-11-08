@@ -35,6 +35,7 @@ class DotResolver(
 
     private val local = ThreadLocal<Connection?>()
     private val all = CopyOnWriteArrayList<Connection>()
+    @Volatile private var closed = false
 
     /**
      * Sends `query[0 until queryLen]` and writes the reply into `out` starting at [outOffset].
@@ -70,6 +71,7 @@ class DotResolver(
 
     /** Closes every connection. Safe to call more than once. */
     fun close() {
+        closed = true
         for (c in all) {
             try {
                 c.socket.close()
@@ -81,6 +83,7 @@ class DotResolver(
     }
 
     private fun connect(server: DotServer): Connection? {
+        if (closed) return null // replaced by another resolver; do not leak new sockets
         var socket: Socket? = null
         return try {
             socket = open(server)
@@ -145,15 +148,5 @@ class DotResolver(
 
     companion object {
         private const val MAX_MESSAGE = 65535
-
-        /** Quad9 over TLS, primary and secondary. Addresses are fixed, so no name is ever looked up. */
-        val DEFAULT_SERVERS: List<DotServer> = listOf(
-            DotServer(InetAddress.getByAddress(byteArrayOf(9, 9, 9, 9)), 853, "dns.quad9.net"),
-            DotServer(
-                InetAddress.getByAddress(byteArrayOf(149.toByte(), 112, 112, 112)),
-                853,
-                "dns.quad9.net",
-            ),
-        )
     }
 }

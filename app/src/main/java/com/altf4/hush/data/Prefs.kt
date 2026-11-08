@@ -2,6 +2,7 @@ package com.altf4.hush.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.altf4.hush.dns.DnsProvider
 import com.altf4.hush.dns.ListCatalog
 import java.time.ZonedDateTime
 
@@ -73,6 +74,21 @@ class Prefs(context: Context) {
     var protectionWanted: Boolean
         get() = sp.getBoolean(K_PROTECTION, false)
         set(value) = edit(bump = false) { putBoolean(K_PROTECTION, value) }
+
+    /** Encrypted upstream resolver. Google by default; changing it bumps [version] so the tunnel switches. */
+    var dnsProvider: DnsProvider
+        get() = DnsProvider.fromKey(sp.getString(K_DNS, null))
+        set(value) = edit(bump = true) { putString(K_DNS, value.key) }
+
+    /** Take the accent colour from the wallpaper (Android 12+). Appearance only: no version bump. */
+    var dynamicColor: Boolean
+        get() = sp.getBoolean(K_DYNAMIC, false)
+        set(value) = edit(bump = false) { putBoolean(K_DYNAMIC, value) }
+
+    /** True once the first-run setup screens have been finished or skipped. */
+    var onboardingDone: Boolean
+        get() = sp.getBoolean(K_ONBOARDED, false)
+        set(value) = edit(bump = false) { putBoolean(K_ONBOARDED, value) }
 
     fun schedule(): Schedule = Schedule(nightEnabled, nightStartMinutes, nightEndMinutes, nightDays)
 
@@ -277,6 +293,9 @@ class Prefs(context: Context) {
         const val K_STRICT = "strict_mode"
         const val K_PROTECTION = "protection_wanted"
         const val K_STATS = "stats"
+        const val K_DNS = "dns_provider"
+        const val K_DYNAMIC = "dynamic_color"
+        const val K_ONBOARDED = "onboarding_done"
         const val K_COUNT_PREFIX = "list_count_"
         const val K_LISTS = "lists_enabled"
         const val K_SOCIAL_PREFIX = "social_"

@@ -34,6 +34,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    lint {
+        // The lifecycle library's LiveData check crashes AGP 8.7's lint; the app uses no LiveData.
+        disable += "NullSafeMutableLiveData"
+    }
 }
 
 dependencies {
@@ -43,7 +48,10 @@ dependencies {
 
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.material3:material3")
+    // Pinned above the BOM: 1.4 brings the current Material 3 components and fixes.
+    implementation("androidx.compose.material3:material3:1.4.0")
+    // Shape morphing for the protection control (the same library Material 3 Expressive uses).
+    implementation("androidx.graphics:graphics-shapes:1.0.1")
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")

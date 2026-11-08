@@ -1,182 +1,203 @@
 package com.altf4.hush.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.altf4.hush.data.Prefs
 import com.altf4.hush.data.ThemeMode
-import com.altf4.hush.dns.ListCatalog
+import com.altf4.hush.dns.DnsProvider
 import com.altf4.hush.dns.Stats
 
-/** Protection options, appearance, backup, statistics and the About section. */
+/** DNS server, protection options, appearance, data, and the About page. */
 @Composable
 fun SettingsScreen(
     prefs: Prefs,
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
+    dynamicColor: Boolean,
+    onDynamicColorChange: (Boolean) -> Unit,
     onRestored: () -> Unit,
+    onReplaySetup: () -> Unit,
 ) {
+    var showAbout by rememberSaveable { mutableStateOf(false) }
+    if (showAbout) {
+        BackHandler { showAbout = false }
+        AboutScreen(onBack = { showAbout = false })
+        return
+    }
+
+    var provider by remember { mutableStateOf(prefs.dnsProvider) }
+    var uncloak by remember { mutableStateOf(prefs.uncloakCname) }
+    var rebinding by remember { mutableStateOf(prefs.blockRebinding) }
+    var bypass by remember { mutableStateOf(prefs.blockBypass) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(CardGap),
     ) {
-        item { ScreenHeader("Settings", "Protection, appearance and backup.") }
+        item { ScreenHeader("Settings") }
+
+        item { SectionLabel("DNS server") }
+        item {
+            ListGroup {
+                DnsProvider.entries.forEachIndexed { index, p ->
+                    if (index > 0) GroupDivider()
+                    RadioRow(
+                        title = if (p == DnsProvider.DEFAULT) "${p.label} (default)" else p.label,
+                        subtitle = p.description,
+                        selected = provider == p,
+                        onSelect = {
+                            provider = p
+                            prefs.dnsProvider = p
+                        },
+                    )
+                }
+            }
+        }
+        item {
+            Footnote(
+                "Lookups that are not blocked go to this server over DNS-over-TLS, with its certificate checked. " +
+                    "If it cannot be reached, lookups fail rather than go out unencrypted.",
+            )
+        }
 
         item { SectionLabel("Protection") }
-        item { ProtectionCard(prefs) }
+        item {
+            ListGroup {
+                SwitchRow(
+                    title = "Block disguised trackers",
+                    subtitle = "Catches trackers hidden behind another name (CNAME cloaking).",
+                    checked = uncloak,
+                    onChange = {
+                        uncloak = it
+                        prefs.uncloakCname = it
+                    },
+                )
+                GroupDivider()
+                SwitchRow(
+                    title = "Block DNS rebinding",
+                    subtitle = "Stops public sites from pointing at devices on your network.",
+                    checked = rebinding,
+                    onChange = {
+                        rebinding = it
+                        prefs.blockRebinding = it
+                    },
+                )
+                GroupDivider()
+                SwitchRow(
+                    title = "Block secure-DNS bypass",
+                    subtitle = "Stops browsers switching to their own encrypted DNS. May break a custom browser setup.",
+                    checked = bypass,
+                    onChange = {
+                        bypass = it
+                        prefs.blockBypass = it
+                    },
+                )
+            }
+        }
 
         item { SectionLabel("Appearance") }
         item {
             HushCard {
-                Text(
-                    text = "Theme",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                Text("Theme", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                SegmentTabs(
+                    labels = ThemeMode.entries.map { it.label },
+                    selected = ThemeMode.entries.indexOf(themeMode),
+                    onSelect = { onThemeChange(ThemeMode.entries[it]) },
+                    modifier = Modifier.padding(top = 12.dp),
                 )
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ThemeMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = themeMode == mode,
-                            onClick = { onThemeChange(mode) },
-                            label = { Text(mode.label) },
-                        )
-                    }
+            }
+        }
+        if (dynamicColorSupported) {
+            item {
+                ListGroup {
+                    SwitchRow(
+                        title = "Wallpaper colours",
+                        subtitle = "Take the accent colour from your wallpaper.",
+                        checked = dynamicColor,
+                        onChange = onDynamicColorChange,
+                    )
                 }
             }
         }
 
-        item { SectionLabel("Backup") }
+        item { SectionLabel("Your data") }
         item { BackupCard(prefs, onRestored) }
+        item { StatisticsGroup() }
 
-        item { SectionLabel("Statistics") }
-        item { StatisticsCard() }
-
-        item { SectionLabel("About") }
-        item { AboutCard() }
-
-        item { Spacer(Modifier.height(8.dp)) }
+        item { SectionLabel("Help") }
+        item {
+            ListGroup {
+                GroupRow(
+                    title = "Run setup again",
+                    subtitle = "Walk through the permissions and checks.",
+                    leading = { IconBadge(Icons.Filled.Refresh) },
+                    trailing = { Chevron() },
+                    onClick = onReplaySetup,
+                )
+                GroupDivider()
+                GroupRow(
+                    title = "About Hush",
+                    subtitle = "How it works, privacy, and filter sources.",
+                    leading = { IconBadge(Icons.Filled.Info) },
+                    trailing = { Chevron() },
+                    onClick = { showAbout = true },
+                )
+            }
+        }
+        item { Footnote("") }
     }
 }
 
 @Composable
-private fun StatisticsCard() {
+private fun StatisticsGroup() {
     var confirming by remember { mutableStateOf(false) }
     val stats = Stats.view
-    HushCard {
-        Text(
-            text = "${formatCount(stats.lifetimeBlocked)} blocked of ${formatCount(stats.lifetimeTotal)} lookups",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = "Only these counts are kept, to draw the charts on Home. Reset them any time.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-        )
-        FilledTonalButton(
-            onClick = {
-                if (confirming) {
-                    Stats.reset()
-                    confirming = false
-                } else {
-                    confirming = true
-                }
+    ListGroup {
+        GroupRow(
+            title = "Statistics",
+            subtitle = "${formatCount(stats.lifetimeBlocked)} blocked of ${formatCount(stats.lifetimeTotal)} lookups. Only counts are kept.",
+            leading = { IconBadge(HushIcons.Chart) },
+            trailing = {
+                TextButton(
+                    onClick = {
+                        if (confirming) {
+                            Stats.reset()
+                            confirming = false
+                        } else {
+                            confirming = true
+                        }
+                    },
+                ) { Text(if (confirming) "Confirm" else "Reset") }
             },
-        ) { Text(if (confirming) "Tap again to reset" else "Reset statistics") }
-    }
-}
-
-@Composable
-private fun AboutCard() {
-    val context = LocalContext.current
-    val version = remember {
-        try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
-        } catch (e: Exception) {
-            ""
-        }
-    }
-    HushCard {
-        Text(
-            text = "Hush",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (version.isNotEmpty()) {
-            Text(
-                text = "Version $version",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            text = "Blocks ads, trackers and sites you choose on your whole phone, and closes distracting apps during quiet hours. It all runs on this device.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = 12.dp),
-        )
-
-        AboutSection(
-            "How it works",
-            "Hush starts a local VPN that carries only DNS lookups; all other traffic goes straight out as usual. " +
-                "A lookup for a blocked name gets an empty answer. Everything else is sent to Quad9 over an encrypted " +
-                "connection, with the certificate checked, and never in the clear. Night lock uses an accessibility " +
-                "service that only learns which app was opened.",
-        )
-        AboutSection(
-            "Privacy",
-            "No account, no ads, no analytics. The names you look up are never saved or logged. The only things " +
-                "stored are your settings and a few counters. The app talks to Quad9 (9.9.9.9 and 149.112.112.112, " +
-                "port 853) and to the list hosts you switch on.",
-        )
-        AboutSection(
-            "Filter lists",
-            "${ListCatalog.all.size} lists to choose from: " + ListCatalog.all.joinToString(", ") { it.name } + ". " +
-                "They are downloaded over HTTPS from fixed addresses built into the app.",
-        )
-        AboutSection(
-            "Good to know",
-            "Blocking works by name, so ads served from the same address as the content cannot be removed, and " +
-                "apps that use their own DNS skip it. Turn off Private DNS in system settings and Secure DNS in " +
-                "your browser, or they bypass Hush.",
         )
     }
 }
 
 @Composable
-private fun AboutSection(title: String, body: String) {
-    Column(Modifier.padding(top = 16.dp)) {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-    }
+fun Footnote(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 8.dp),
+    )
 }

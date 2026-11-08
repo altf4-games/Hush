@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -39,7 +39,7 @@ import com.altf4.hush.dns.UpdateStatus
 import java.text.DateFormat
 import java.util.Date
 
-private val TABS = listOf("Lists", "Rules", "Social")
+private val TABS = listOf("Lists", "My rules", "Social")
 
 /** What gets blocked: the downloaded lists, the person's own rules, and the social presets. */
 @Composable
@@ -52,11 +52,11 @@ fun FiltersScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(CardGap),
     ) {
         item { ScreenHeader("Filters", "Choose what Hush blocks.") }
-        item { SegmentTabs(TABS, tab) { tab = it } }
+        item { SegmentTabs(TABS, tab, { tab = it }, Modifier.padding(bottom = 4.dp)) }
 
         when (tab) {
             0 -> listsTab(prefs, onUpdateNow, onWeeklyChange)
@@ -64,105 +64,86 @@ fun FiltersScreen(
             else -> socialTab(prefs)
         }
 
-        item { Spacer(Modifier.height(8.dp)) }
+        item { Spacer(Modifier.height(16.dp)) }
     }
 }
 
 // --- Lists ---------------------------------------------------------------------------------
 
-private fun androidx.compose.foundation.lazy.LazyListScope.listsTab(
-    prefs: Prefs,
-    onUpdateNow: () -> Unit,
-    onWeeklyChange: (Boolean) -> Unit,
-) {
+private fun LazyListScope.listsTab(prefs: Prefs, onUpdateNow: () -> Unit, onWeeklyChange: (Boolean) -> Unit) {
     item(key = "lists-body") {
         var enabledLists by remember { mutableStateOf(prefs.enabledLists()) }
         var weekly by remember { mutableStateOf(prefs.weeklyUpdate) }
         val updatedAt = remember(UpdateStatus.running) { prefs.listsUpdatedAt }
         val entryCount = remember(UpdateStatus.running) { prefs.listsEntryCount }
-        // The lists that went into the last download; a difference means choices are not applied yet.
+        // The lists in the last download; any difference means the current choices are not applied yet.
         val applied = remember(UpdateStatus.running) {
             ListCatalog.all.filter { prefs.listSha(it.id) != null }.map { it.id }.toSet()
         }
         val pending = updatedAt != 0L && applied != enabledLists
 
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            HushCard {
-                Text(
-                    text = "DOMAINS LOADED",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(4.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
+            HushCard(shape = MaterialTheme.shapes.extraLarge) {
+                Text("Domains blocked", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     text = if (entryCount > 0) formatCount(entryCount) else "Starter list",
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.displayMedium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 4.dp),
                 )
                 Text(
                     text = summary(updatedAt, applied.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.padding(top = 4.dp),
                 )
                 Row(
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.padding(top = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Button(onClick = onUpdateNow, enabled = !UpdateStatus.running) {
-                        Text(if (UpdateStatus.running) "Updating" else "Update now")
+                        Text(if (UpdateStatus.running) "Updating…" else if (pending) "Apply changes" else "Update now")
                     }
-                    UpdateStatus.message?.let { message ->
+                    val message = UpdateStatus.message ?: if (pending) "List choices changed" else null
+                    if (message != null) {
                         Text(
                             text = message,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = if (pending) statusColors.warning else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
                         )
                     }
                 }
-                SettingRow(
+            }
+
+            ListGroup {
+                SwitchRow(
                     title = "Update every week",
-                    description = "Fetches fresh lists on Wi-Fi while charging.",
+                    subtitle = "Fresh lists on Wi-Fi while charging.",
                     checked = weekly,
                     onChange = {
                         weekly = it
                         onWeeklyChange(it)
                     },
-                    modifier = Modifier.padding(top = 16.dp),
                 )
-            }
-
-            if (pending) {
-                HushCard {
-                    Text(
-                        text = "List choices changed",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "Update now to download the new selection.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
-                    )
-                    Button(onClick = onUpdateNow, enabled = !UpdateStatus.running) { Text("Update now") }
-                }
             }
 
             for (category in ListCategory.entries) {
                 SectionLabel(category.label)
-                for (source in ListCatalog.inCategory(category)) {
-                    ListRow(
-                        source = source,
-                        enabled = source.id in enabledLists,
-                        count = remember(UpdateStatus.running) { prefs.listCount(source.id) },
-                        onToggle = { on ->
-                            enabledLists = if (on) enabledLists + source.id else enabledLists - source.id
-                            prefs.setListEnabled(source.id, on)
-                        },
-                    )
+                ListGroup {
+                    ListCatalog.inCategory(category).forEachIndexed { index, source ->
+                        if (index > 0) GroupDivider()
+                        ListRow(
+                            source = source,
+                            enabled = source.id in enabledLists,
+                            count = remember(UpdateStatus.running) { prefs.listCount(source.id) },
+                            onToggle = { on ->
+                                enabledLists = if (on) enabledLists + source.id else enabledLists - source.id
+                                prefs.setListEnabled(source.id, on)
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -170,54 +151,31 @@ private fun androidx.compose.foundation.lazy.LazyListScope.listsTab(
 }
 
 private fun summary(updatedAt: Long, lists: Int): String {
-    if (updatedAt == 0L) return "Only a small built-in list is in use. Tap Update now to download the full lists."
+    if (updatedAt == 0L) return "Only a small built-in list is in use. Update to download the full lists."
     val whenText = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(updatedAt))
     val noun = if (lists == 1) "list" else "lists"
-    return "From $lists $noun. Updated $whenText."
+    return "From $lists $noun · updated $whenText"
 }
 
 @Composable
 private fun ListRow(source: BlockListSource, enabled: Boolean, count: Int, onToggle: (Boolean) -> Unit) {
-    HushCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                Text(
-                    text = source.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = source.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (enabled && count > 0) {
-                    Text(
-                        text = "${formatCount(count)} domains",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-            }
-            Switch(checked = enabled, onCheckedChange = onToggle)
-        }
-    }
+    val detail = if (enabled && count > 0) "${formatCount(count)} domains · ${source.description}" else source.description
+    SwitchRow(title = source.name, subtitle = detail, checked = enabled, onChange = onToggle)
 }
 
-// --- Rules ---------------------------------------------------------------------------------
+// --- My rules ------------------------------------------------------------------------------
 
-private fun androidx.compose.foundation.lazy.LazyListScope.rulesTab(prefs: Prefs) {
+private fun LazyListScope.rulesTab(prefs: Prefs) {
     item(key = "rules-body") {
         var custom by remember { mutableStateOf(prefs.customBlocked()) }
         var allowed by remember { mutableStateOf(prefs.allowed()) }
         var regexBlock by remember { mutableStateOf(prefs.regexBlock()) }
         var regexAllow by remember { mutableStateOf(prefs.regexAllow()) }
 
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionLabel("Blocked sites · ${custom.size}")
+        Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
             DomainEditor(
-                description = "Always blocked, including every subdomain. Paste a domain or a link.",
+                title = "Blocked sites",
+                description = "Always blocked, with every subdomain. Paste a domain or a link.",
                 hint = "example.com",
                 items = custom,
                 validate = ::validateDomain,
@@ -230,10 +188,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.rulesTab(prefs: Prefs
                     prefs.setCustomBlocked(domain, false)
                 },
             )
-
-            SectionLabel("Allowed sites · ${allowed.size}")
             DomainEditor(
-                description = "Never blocked, even if a list or a rule would block them. Also exempt from the protections.",
+                title = "Allowed sites",
+                description = "Never blocked, even if a list would block them. Use this if a site breaks.",
                 hint = "example.com",
                 items = allowed,
                 validate = ::validateDomain,
@@ -247,9 +204,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.rulesTab(prefs: Prefs
                 },
             )
 
-            SectionLabel("Advanced: block patterns · ${regexBlock.size}")
+            SectionLabel("Advanced")
             DomainEditor(
-                description = "Regular expressions matched anywhere in a name, ignoring case. Use ^ and \$ to match a whole name. Slow or risky patterns are refused.",
+                title = "Block patterns",
+                description = "Regular expressions matched anywhere in a name, ignoring case. Slow or risky patterns are refused.",
                 hint = "^ads[0-9]*\\.",
                 items = regexBlock,
                 validate = { input -> validatePattern(input, regexBlock.size) },
@@ -264,9 +222,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.rulesTab(prefs: Prefs
                 keyboardType = KeyboardType.Ascii,
                 monospace = true,
             )
-
-            SectionLabel("Advanced: allow patterns · ${regexAllow.size}")
             DomainEditor(
+                title = "Allow patterns",
                 description = "Names matching these stay reachable, overriding lists and block patterns.",
                 hint = "\\.mycompany\\.com\$",
                 items = regexAllow,
@@ -300,36 +257,34 @@ private fun validatePattern(input: String, existingCount: Int): EditorResult {
 
 // --- Social --------------------------------------------------------------------------------
 
-private fun androidx.compose.foundation.lazy.LazyListScope.socialTab(prefs: Prefs) {
-    val quietNow = prefs.isLocked()
-    item(key = "social-note") {
-        Text(
-            text = if (quietNow) {
-                "Quiet hours are running: these can be blocked more, not less, until they end."
-            } else {
-                "Block a whole service all day, or only during your quiet hours."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-    }
+private fun LazyListScope.socialTab(prefs: Prefs) {
     item(key = "social-body") {
+        val quietNow = remember { prefs.isLocked() }
         val modes = remember {
             mutableStateMapOf<String, SocialMode>().apply {
                 SocialSites.all.forEach { put(it.id, prefs.socialMode(it.id)) }
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SocialSites.all.forEach { site ->
-                SocialRow(
-                    site = site,
-                    mode = modes[site.id] ?: SocialMode.Off,
-                    onModeChange = { mode ->
-                        // Refused while the quiet window runs if it would block less.
-                        if (prefs.setSocialMode(site.id, mode)) modes[site.id] = mode
-                    },
-                )
+        Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
+            Footnote(
+                if (quietNow) {
+                    "Quiet hours are running: these can be blocked more, not less, until they end."
+                } else {
+                    "Block a whole service all day, or only during your quiet hours."
+                },
+            )
+            ListGroup {
+                SocialSites.all.forEachIndexed { index, site ->
+                    if (index > 0) GroupDivider()
+                    SocialRow(
+                        site = site,
+                        mode = modes[site.id] ?: SocialMode.Off,
+                        onModeChange = { mode ->
+                            // Refused while the quiet window runs if it would block less.
+                            if (prefs.setSocialMode(site.id, mode)) modes[site.id] = mode
+                        },
+                    )
+                }
             }
         }
     }
@@ -342,36 +297,24 @@ private fun SocialRow(site: SocialSite, mode: SocialMode, onModeChange: (SocialM
         SocialMode.Always -> "Blocked all day"
         SocialMode.Night -> "Blocked during quiet hours"
     }
-    HushCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = site.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = mode != SocialMode.Off,
-                onCheckedChange = { on ->
-                    onModeChange(if (on) SocialMode.Always else SocialMode.Off)
-                },
-            )
-        }
+    Column {
+        GroupRow(
+            title = site.name,
+            subtitle = summary,
+            onClick = { onModeChange(if (mode == SocialMode.Off) SocialMode.Always else SocialMode.Off) },
+            trailing = {
+                Switch(checked = mode != SocialMode.Off, onCheckedChange = null)
+            },
+        )
         if (mode != SocialMode.Off) {
             Row(
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 FilterChip(
                     selected = mode == SocialMode.Always,
                     onClick = { onModeChange(SocialMode.Always) },
-                    label = { Text("Always") },
+                    label = { Text("All day") },
                 )
                 FilterChip(
                     selected = mode == SocialMode.Night,

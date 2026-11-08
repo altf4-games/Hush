@@ -1,5 +1,6 @@
 package com.altf4.hush.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -56,7 +57,7 @@ fun AppsScreen(prefs: Prefs) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item { ScreenHeader("Apps", "Choose which apps are closed during quiet hours.") }
@@ -137,8 +138,13 @@ fun AppsScreen(prefs: Prefs) {
 
 @Composable
 private fun AppRow(app: AppEntry, checked: Boolean, canTurnOff: Boolean, onChange: (Boolean) -> Unit) {
-    HushCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    HushCard(padding = false, shape = MaterialTheme.shapes.medium) {
+        Row(
+            modifier = Modifier
+                .clickable(enabled = canTurnOff || !checked) { onChange(!checked) }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             val icon = app.icon
             if (icon != null) {
                 Image(
@@ -164,7 +170,7 @@ private fun AppRow(app: AppEntry, checked: Boolean, canTurnOff: Boolean, onChang
                     )
                 }
             }
-            Switch(checked = checked, enabled = canTurnOff || !checked, onCheckedChange = onChange)
+            Switch(checked = checked, enabled = canTurnOff || !checked, onCheckedChange = null)
         }
     }
 }

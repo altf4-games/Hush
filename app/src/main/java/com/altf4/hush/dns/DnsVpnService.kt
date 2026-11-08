@@ -9,6 +9,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.Executors
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
@@ -27,7 +28,15 @@ class DnsVpnService : VpnService() {
     private var tun: ParcelFileDescriptor? = null
     private var reader: Thread? = null
     private var pool: ThreadPoolExecutor? = null
-    private var resolver: DotResolver? = null
+
+    /**
+     * Rebuilds rules and swaps resolvers off the main thread: reading the lists is disk work, and
+     * closing TLS sockets sends data, which Android refuses on the main thread. One thread keeps
+     * changes in order.
+     */
+    private val background = Executors.newSingleThreadExecutor { r -> Thread(r, "hush-rules") }
+    @Volatile private var resolver: DotResolver? = null
+    @Volatile private var provider: DnsProvider = DnsProvider.DEFAULT
     private var versionHandle: AutoCloseable? = null
 
     private val cache = DnsCache()
@@ -70,6 +79,7 @@ class DnsVpnService : VpnService() {
 
     override fun onDestroy() {
         shutdown()
+        background.shutdown() // lets the queued socket closes finish, then the thread ends
         super.onDestroy()
     }
 
@@ -97,14 +107,18 @@ class DnsVpnService : VpnService() {
         // Settings and list updates bump a version counter; rebuild only when it changes. Cached
         // replies were vetted under the old rules, so they are dropped too.
         versionHandle = prefs.registerVersionListener {
-            filter = Rules.build(applicationContext, prefs)
-            cache.clear()
+            background.execute {
+                if (!running) return@execute
+                filter = Rules.build(applicationContext, prefs)
+                switchProvider(prefs.dnsProvider)
+                cache.clear()
+            }
         }
         // The tunnel restarts after reboot with Always-on VPN, which re-arms the weekly update.
         UpdateScheduler.sync(applicationContext, prefs.weeklyUpdate)
 
-        val connector = TlsConnector(protect = { socket -> protect(socket) })
-        resolver = DotResolver(DotResolver.DEFAULT_SERVERS, open = connector::open)
+        provider = prefs.dnsProvider
+        resolver = newResolver(provider)
         pool = ThreadPoolExecutor(
             WORKERS, WORKERS, 0L, TimeUnit.MILLISECONDS,
             ArrayBlockingQueue<Runnable>(QUEUE),
@@ -120,6 +134,20 @@ class DnsVpnService : VpnService() {
         return true
     }
 
+    private fun newResolver(p: DnsProvider): DotResolver {
+        val connector = TlsConnector(protect = { socket -> protect(socket) })
+        return DotResolver(p.servers, open = connector::open)
+    }
+
+    /** Points lookups at another upstream. In-flight lookups finish (or fail) on the old one. */
+    private fun switchProvider(next: DnsProvider) {
+        if (!running || next == provider) return
+        provider = next
+        val old = resolver
+        resolver = newResolver(next)
+        old?.close() // already on the background thread
+    }
+
     private fun shutdown() {
         running = false
         Stats.flush()
@@ -129,7 +157,7 @@ class DnsVpnService : VpnService() {
         reader = null
         pool?.shutdownNow()
         pool = null
-        resolver?.close()
+        resolver?.let { old -> background.execute { old.close() } }
         resolver = null
         cache.clear()
         try {

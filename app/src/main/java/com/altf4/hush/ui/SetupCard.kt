@@ -32,9 +32,9 @@ fun SetupCard(
 ) {
     HushCard {
         Text(
-            text = "SET UP",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
+            text = "Finish setting up",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(8.dp))
         items.forEach { item ->

@@ -11,16 +11,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,6 +43,8 @@ import com.altf4.hush.ui.AppsScreen
 import com.altf4.hush.ui.HushTheme
 import com.altf4.hush.ui.FiltersScreen
 import com.altf4.hush.ui.HomeScreen
+import com.altf4.hush.ui.HushIcons
+import com.altf4.hush.ui.OnboardingScreen
 import com.altf4.hush.ui.NightScreen
 import com.altf4.hush.ui.SettingsScreen
 
@@ -91,9 +94,9 @@ class MainActivity : ComponentActivity() {
 
 private enum class HomeTab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
-    Filters("Filters", Icons.Filled.List),
-    Night("Night", Icons.Filled.Lock),
-    Apps("Apps", Icons.Filled.Menu),
+    Filters("Filters", HushIcons.Filter),
+    Night("Night", HushIcons.Moon),
+    Apps("Apps", HushIcons.Grid),
     Settings("Settings", Icons.Filled.Settings),
 }
 
@@ -105,16 +108,34 @@ private fun HushApp(
     onWeeklyChange: (Boolean) -> Unit,
 ) {
     var themeMode by remember { mutableStateOf(prefs.themeMode) }
+    var dynamicColor by remember { mutableStateOf(prefs.dynamicColor) }
+    var onboarding by rememberSaveable { mutableStateOf(!prefs.onboardingDone) }
     // Bumped after settings are loaded from a file, so every screen re-reads them.
     var restoreCount by remember { mutableIntStateOf(0) }
 
-    HushTheme(themeMode) {
+    HushTheme(themeMode, dynamicColor) {
+        if (onboarding) {
+            Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+                OnboardingScreen(
+                    prefs = prefs,
+                    protectionOn = VpnState.running,
+                    onProtectionChange = onProtectionChange,
+                    onFinish = {
+                        prefs.onboardingDone = true
+                        onboarding = false
+                        restoreCount++ // re-read choices made during setup
+                    },
+                )
+            }
+            return@HushTheme
+        }
+
         var selected by rememberSaveable { mutableIntStateOf(0) }
 
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp) {
                     HomeTab.entries.forEach { tab ->
                         NavigationBarItem(
                             selected = selected == tab.ordinal,
@@ -128,39 +149,48 @@ private fun HushApp(
         ) { inner ->
             Box(Modifier.fillMaxSize().padding(inner)) {
                 key(restoreCount) {
-                    when (HomeTab.entries[selected]) {
-                        HomeTab.Home -> HomeScreen(
-                            prefs = prefs,
-                            protectionOn = VpnState.running,
-                            onProtectionChange = onProtectionChange,
-                            onUpdateNow = onUpdateNow,
-                            onOpenFilters = { selected = HomeTab.Filters.ordinal },
-                            onOpenApps = { selected = HomeTab.Apps.ordinal },
-                            onOpenNight = { selected = HomeTab.Night.ordinal },
-                        )
-                        HomeTab.Filters -> FiltersScreen(
-                            prefs = prefs,
-                            onUpdateNow = onUpdateNow,
-                            onWeeklyChange = onWeeklyChange,
-                        )
-                        HomeTab.Night -> NightScreen(prefs)
-                        HomeTab.Apps -> AppsScreen(prefs)
-                        HomeTab.Settings -> SettingsScreen(
-                            prefs = prefs,
-                            themeMode = themeMode,
-                            onThemeChange = {
-                                themeMode = it
-                                prefs.themeMode = it
-                            },
-                            onRestored = {
-                                // Settings were replaced from a file: refresh what the screens and
-                                // services hold, and re-arm the weekly update if it is now on.
-                                themeMode = prefs.themeMode
-                                if (prefs.strictMode) EmergencyPass.shared.clear()
-                                onWeeklyChange(prefs.weeklyUpdate)
-                                restoreCount++
-                            },
-                        )
+                    Crossfade(targetState = HomeTab.entries[selected], animationSpec = tween(180), label = "tab") { tab ->
+                        when (tab) {
+                            HomeTab.Home -> HomeScreen(
+                                prefs = prefs,
+                                protectionOn = VpnState.running,
+                                onProtectionChange = onProtectionChange,
+                                onUpdateNow = onUpdateNow,
+                                onOpenFilters = { selected = HomeTab.Filters.ordinal },
+                                onOpenNight = { selected = HomeTab.Night.ordinal },
+                                onOpenApps = { selected = HomeTab.Apps.ordinal },
+                                onOpenSettings = { selected = HomeTab.Settings.ordinal },
+                            )
+                            HomeTab.Filters -> FiltersScreen(
+                                prefs = prefs,
+                                onUpdateNow = onUpdateNow,
+                                onWeeklyChange = onWeeklyChange,
+                            )
+                            HomeTab.Night -> NightScreen(prefs)
+                            HomeTab.Apps -> AppsScreen(prefs)
+                            HomeTab.Settings -> SettingsScreen(
+                                prefs = prefs,
+                                themeMode = themeMode,
+                                onThemeChange = {
+                                    themeMode = it
+                                    prefs.themeMode = it
+                                },
+                                dynamicColor = dynamicColor,
+                                onDynamicColorChange = {
+                                    dynamicColor = it
+                                    prefs.dynamicColor = it
+                                },
+                                onRestored = {
+                                    // Settings were replaced from a file: refresh what the screens and
+                                    // services hold, and re-arm the weekly update if it is now on.
+                                    themeMode = prefs.themeMode
+                                    if (prefs.strictMode) EmergencyPass.shared.clear()
+                                    onWeeklyChange(prefs.weeklyUpdate)
+                                    restoreCount++
+                                },
+                                onReplaySetup = { onboarding = true },
+                            )
+                        }
                     }
                 }
             }

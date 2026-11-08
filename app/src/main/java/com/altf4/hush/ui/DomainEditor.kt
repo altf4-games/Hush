@@ -1,5 +1,10 @@
 package com.altf4.hush.ui
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -36,6 +41,7 @@ class EditorResult(val value: String?, val error: String? = null)
  */
 @Composable
 fun DomainEditor(
+    title: String,
     description: String,
     hint: String,
     items: Set<String>,
@@ -61,12 +67,28 @@ fun DomainEditor(
     }
 
     HushCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (items.isNotEmpty()) {
+                Text(
+                    text = items.size.toString(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Text(
             text = description,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = text,
@@ -76,17 +98,20 @@ fun DomainEditor(
                 },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                label = { Text(hint) },
+                placeholder = { Text(hint) },
                 isError = error != null,
                 shape = MaterialTheme.shapes.medium,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
+                ),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = keyboardType,
                     imeAction = ImeAction.Done,
                 ),
                 keyboardActions = KeyboardActions(onDone = { submit() }),
             )
-            Spacer(Modifier.width(8.dp))
-            IconButton(onClick = { submit() }) {
+            Spacer(Modifier.width(10.dp))
+            FilledTonalIconButton(onClick = { submit() }, modifier = Modifier.size(52.dp)) {
                 Icon(Icons.Filled.Add, contentDescription = "Add")
             }
         }
@@ -95,12 +120,18 @@ fun DomainEditor(
                 text = message,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 4.dp, start = 4.dp),
+                modifier = Modifier.padding(top = 6.dp, start = 4.dp),
             )
         }
+        if (items.isNotEmpty()) Spacer(Modifier.height(8.dp))
         items.sorted().forEach { entry ->
             Row(
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .padding(start = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -111,7 +142,7 @@ fun DomainEditor(
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { onRemove(entry) }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Remove $entry")
+                    Icon(Icons.Filled.Close, contentDescription = "Remove $entry", modifier = Modifier.size(18.dp))
                 }
             }
         }

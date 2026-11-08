@@ -1,8 +1,12 @@
 package com.altf4.hush.ui
 
-import android.content.Intent
-import android.provider.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,15 +15,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,15 +40,14 @@ import com.altf4.hush.block.BlockerState
 import com.altf4.hush.data.Prefs
 import com.altf4.hush.data.SetupChecklist
 import com.altf4.hush.data.SetupItem
+import com.altf4.hush.dns.ListCatalog
 import com.altf4.hush.dns.Stats
 import com.altf4.hush.dns.UpdateStatus
-import java.text.DateFormat
 import java.time.LocalDate
 import java.time.format.TextStyle
-import java.util.Date
 import java.util.Locale
 
-/** The dashboard: protection switch, what has been blocked, and the state of the filters. */
+/** The dashboard: protection, what has been blocked, and shortcuts to everything else. */
 @Composable
 fun HomeScreen(
     prefs: Prefs,
@@ -43,93 +55,132 @@ fun HomeScreen(
     onProtectionChange: (Boolean) -> Unit,
     onUpdateNow: () -> Unit,
     onOpenFilters: () -> Unit,
-    onOpenApps: () -> Unit,
     onOpenNight: () -> Unit,
+    onOpenApps: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val context = LocalContext.current
+    val status = statusColors
     // Show the saved counts even while the tunnel is down.
     LaunchedEffect(Unit) { Stats.attach(prefs) }
     val stats = Stats.view
+    val resumed = rememberResumeCount()
 
-    val updatedAt = remember(UpdateStatus.running) { prefs.listsUpdatedAt }
     val entryCount = remember(UpdateStatus.running) { prefs.listsEntryCount }
-    val listCount = remember(UpdateStatus.running) {
-        com.altf4.hush.dns.ListCatalog.all.count { prefs.listSha(it.id) != null }
-    }
+    val listCount = remember(UpdateStatus.running) { ListCatalog.all.count { prefs.listSha(it.id) != null } }
+    val provider = remember { prefs.dnsProvider }
+    val privateDns = remember(resumed) { readPrivateDns(context) }
+    val nightOn = remember { prefs.nightEnabled }
 
     val weekLetters = remember {
         val today = LocalDate.now()
         (6 downTo 0).map { today.minusDays(it.toLong()).dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()) }
     }
+    val todayRate = if (stats.todayTotal > 0) stats.todayBlocked * 100.0 / stats.todayTotal else 0.0
     val weekBlocked = stats.weekBlocked.sum()
-    val rate = if (stats.lifetimeTotal > 0) (stats.lifetimeBlocked * 100.0 / stats.lifetimeTotal) else 0.0
 
     val checklist = SetupChecklist.items(
         protectionOn,
         BlockerState.running,
         remember { prefs.blockedApps().size },
-        remember { prefs.nightEnabled },
+        nightOn,
     )
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(CardGap),
     ) {
-        item { ScreenHeader("Hush", "Ads, trackers and distractions, blocked on this phone.") }
-
         item {
-            HushCard {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Spacer(Modifier.height(8.dp))
-                    PowerButton(on = protectionOn, onClick = { onProtectionChange(!protectionOn) })
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = if (protectionOn) "Protection is on" else "Protection is off",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = if (protectionOn) successColor() else MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = if (protectionOn) {
-                            "Lookups are filtered and sent encrypted to Quad9."
-                        } else {
-                            "Tap the button to start blocking in every app and browser."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                    )
+            Row(
+                Modifier.fillMaxWidth().padding(start = 4.dp, top = 20.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Hush",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f),
+                )
+                if (protectionOn) {
+                    StatusPill("Protected", status.protected, status.protectedContainer)
+                } else {
+                    StatusPill("Paused", status.paused, status.pausedContainer)
                 }
             }
         }
 
+        // Hero: the protection control and what it is doing right now.
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile(
-                    value = formatCount(stats.todayBlocked),
-                    caption = "Blocked today",
-                    modifier = Modifier.weight(1f),
-                    accent = MaterialTheme.colorScheme.primary,
-                )
-                StatTile(
-                    value = formatCount(stats.todayTotal),
-                    caption = "Queries today",
-                    modifier = Modifier.weight(1f),
-                )
+            HushCard(shape = MaterialTheme.shapes.extraLarge) {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    ProtectionOrb(on = protectionOn, onClick = { onProtectionChange(!protectionOn) })
+                    AnimatedContent(
+                        targetState = protectionOn,
+                        transitionSpec = { fadeIn(HushMotion.standard()) togetherWith fadeOut(HushMotion.standard()) },
+                        label = "state",
+                    ) { on ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (on) "You're protected" else "Protection is paused",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = if (on) {
+                                    "Filtering ${compactCount(entryCount.coerceAtLeast(0))} domains · encrypted via ${provider.label}"
+                                } else {
+                                    "Tap the shield to block ads and trackers in every app."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
+
+        if (protectionOn && privateDns.bypassesHush) {
+            item {
+                HushCard(color = status.warningContainer) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Filled.Warning, contentDescription = null, tint = status.warning)
+                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                            Text("Private DNS is bypassing Hush", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                            Text(
+                                "A Private DNS provider is set in system settings, so lookups skip blocking. Set it to Off or Automatic.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                            )
+                            FilledTonalButton(onClick = { openNetworkSettings(context) }) { Text("Open settings") }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bento: today's numbers.
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(CardGap)) {
                 StatTile(
-                    value = "%.1f%%".format(rate),
-                    caption = "Blocked overall",
+                    value = compactCount(stats.todayBlocked),
+                    caption = "Blocked today",
+                    icon = HushIcons.Shield,
                     modifier = Modifier.weight(1f),
+                    extra = { Sparkline(stats.weekBlocked) },
                 )
                 StatTile(
-                    value = if (entryCount > 0) formatCount(entryCount) else "Starter",
-                    caption = if (entryCount > 0) "Domains in filters" else "Small built-in list",
+                    value = "%.0f%%".format(todayRate),
+                    caption = "of ${compactCount(stats.todayTotal)} lookups",
+                    icon = HushIcons.Chart,
+                    tint = status.protected,
+                    container = status.protectedContainer,
                     modifier = Modifier.weight(1f),
+                    extra = { RateBar(todayRate.toFloat() / 100f) },
                 )
             }
         }
@@ -138,69 +189,64 @@ fun HomeScreen(
             HushCard {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Column(Modifier.weight(1f)) {
+                        Text("This week", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                         Text(
-                            text = "LAST 7 DAYS",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "${formatCount(weekBlocked)} blocked",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    Text(
-                        text = "${formatCount(stats.lifetimeBlocked)} since the start",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(16.dp))
-                BarChart(values = stats.weekBlocked, labels = weekLetters)
-                Text(
-                    text = "Only counts are kept. Names of the sites you visit are never stored.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-            }
-        }
-
-        item {
-            HushCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                        Text(
-                            text = "Filters",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = filterSummary(updatedAt, entryCount, listCount),
+                            "${formatCount(weekBlocked)} blocked · ${formatCount(stats.lifetimeBlocked)} all time",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Button(onClick = onUpdateNow, enabled = !UpdateStatus.running) {
-                        Text(
-                            when {
-                                UpdateStatus.running -> "Updating"
-                                updatedAt == 0L -> "Download"
-                                else -> "Update"
-                            },
-                        )
-                    }
                 }
-                UpdateStatus.message?.let { message ->
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
+                Spacer(Modifier.height(20.dp))
+                WeekChart(blocked = stats.weekBlocked, total = stats.weekTotal, labels = weekLetters)
+                Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Legend(MaterialTheme.colorScheme.primary, "Blocked")
+                    Legend(MaterialTheme.colorScheme.surfaceContainerHighest, "Allowed")
                 }
-                androidx.compose.material3.TextButton(onClick = onOpenFilters) { Text("Choose filters") }
+            }
+        }
+
+        // Shortcuts.
+        item {
+            ListGroup {
+                GroupRow(
+                    title = "Filters",
+                    subtitle = if (entryCount > 0) "${formatCount(entryCount)} domains from $listCount lists" else "Starter list only — download the full lists",
+                    leading = { IconBadge(HushIcons.Filter) },
+                    trailing = {
+                        TextButton(onClick = onUpdateNow, enabled = !UpdateStatus.running) {
+                            Text(if (UpdateStatus.running) "Updating…" else "Update")
+                        }
+                    },
+                    onClick = onOpenFilters,
+                )
+                GroupDivider()
+                GroupRow(
+                    title = "DNS server",
+                    subtitle = "${provider.label} · DNS-over-TLS",
+                    leading = { IconBadge(HushIcons.Dns) },
+                    trailing = { Chevron() },
+                    onClick = onOpenSettings,
+                )
+                GroupDivider()
+                GroupRow(
+                    title = "Night lock",
+                    subtitle = if (nightOn) "On · quiet hours scheduled" else "Off",
+                    leading = { IconBadge(HushIcons.Moon) },
+                    trailing = { Chevron() },
+                    onClick = onOpenNight,
+                )
+            }
+        }
+
+        UpdateStatus.message?.let { message ->
+            item {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
             }
         }
 
@@ -210,9 +256,7 @@ fun HomeScreen(
                     items = checklist,
                     actions = mapOf(
                         SetupItem.Id.Protection to ("Turn on" to { onProtectionChange(true) }),
-                        SetupItem.Id.Accessibility to (
-                            "Open" to { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-                            ),
+                        SetupItem.Id.Accessibility to ("Open" to { openAccessibilitySettings(context) }),
                         SetupItem.Id.Apps to ("Choose" to onOpenApps),
                         SetupItem.Id.Night to ("Set up" to onOpenNight),
                     ),
@@ -220,13 +264,50 @@ fun HomeScreen(
             }
         }
 
-        item { Spacer(Modifier.height(8.dp)) }
+        item {
+            Text(
+                text = "Only counts are kept. The names of sites you visit are never stored.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            )
+        }
     }
 }
 
-private fun filterSummary(updatedAt: Long, entryCount: Int, lists: Int): String {
-    if (updatedAt == 0L) return "Only a small starter list is in use. Download the full lists to block much more."
-    val whenText = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(updatedAt))
-    val noun = if (lists == 1) "list" else "lists"
-    return "${formatCount(entryCount)} domains from $lists $noun. Updated $whenText."
+@Composable
+private fun RateBar(share: Float) {
+    val status = statusColors
+    // Same height as the sparkline in the neighbouring tile, so the tiles line up.
+    Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.BottomStart) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(share.coerceIn(0f, 1f))
+                    .height(8.dp)
+                    .clip(CircleShape)
+                    .background(status.protected),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Legend(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+fun Chevron() {
+    Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
 }
