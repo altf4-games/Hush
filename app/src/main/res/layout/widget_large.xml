@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+            android:id="@+id/widget_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:singleLine="true"
+            android:text="@string/widget_protected"
+            android:textColor="@color/widget_protected"
+            android:textSize="13sp" />
+
+            <TextView
+            android:id="@+id/widget_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:singleLine="true"
+            android:text="1,284"
+            android:textColor="@color/widget_text"
+            android:textSize="36sp" />
+
+            <TextView
+            android:id="@+id/widget_caption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:text="@string/widget_blocked_today"
+            android:textColor="@color/widget_text_dim"
+            android:textSize="13sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/widget_toggle"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:padding="16dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_power" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/percent_chip"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/widget_chip"
+            android:orientation="vertical"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp">
+
+            <TextView
+                android:id="@+id/widget_percent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:singleLine="true"
+                android:text="97%"
+                android:textColor="@color/widget_text"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:text="@string/widget_label_blocked"
+                android:textColor="@color/widget_text_dim"
+                android:textSize="11sp" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/domains_chip"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/widget_chip"
+            android:orientation="vertical"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp"
+            android:layout_marginStart="6dp">
+
+            <TextView
+                android:id="@+id/widget_domains"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:singleLine="true"
+                android:text="505K"
+                android:textColor="@color/widget_text"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:text="@string/widget_label_domains"
+                android:textColor="@color/widget_text_dim"
+                android:textSize="11sp" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/week_chip"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/widget_chip"
+            android:orientation="vertical"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp"
+            android:layout_marginStart="6dp">
+
+            <TextView
+                android:id="@+id/widget_week"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:singleLine="true"
+                android:text="8.2K"
+                android:textColor="@color/widget_text"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:text="@string/widget_label_week"
+                android:textColor="@color/widget_text_dim"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/widget_chart"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="10dp"
+        android:layout_weight="1"
+        android:contentDescription="@string/widget_chart_description"
+        android:scaleType="fitXY" />
+</LinearLayout>

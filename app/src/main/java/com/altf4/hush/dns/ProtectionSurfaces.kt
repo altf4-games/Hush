@@ -22,6 +22,7 @@ object ProtectionSurfaces {
             pending.set(false)
             try {
                 HushWidget.refresh(app)
+                ProtectionTile.redraw()
                 TileService.requestListeningState(app, ComponentName(app, ProtectionTile::class.java))
             } catch (e: RuntimeException) {
                 // A launcher or the system UI that is not ready; the next change redraws it.

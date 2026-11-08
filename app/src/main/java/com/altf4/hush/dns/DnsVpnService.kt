@@ -65,6 +65,7 @@ class DnsVpnService : VpnService() {
             return START_NOT_STICKY
         }
         if (!running && !start()) {
+            ProtectionSurfaces.refresh(applicationContext) // undo any "on" a tile showed in advance
             stopSelf()
             return START_NOT_STICKY
         }

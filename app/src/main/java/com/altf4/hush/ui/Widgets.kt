@@ -26,13 +26,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -264,18 +262,40 @@ fun Sparkline(values: List<Int>, modifier: Modifier = Modifier, color: Color = M
     }
 }
 
-/** Segmented control for switching between the parts of a screen. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Pill-shaped tabs for switching between the parts of a screen: a tonal track with the chosen one raised. */
 @Composable
 fun SegmentTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         labels.forEachIndexed { index, label ->
-            SegmentedButton(
-                selected = selected == index,
-                onClick = { onSelect(index) },
-                shape = SegmentedButtonDefaults.itemShape(index, labels.size),
-                label = { Text(label, maxLines = 1) },
+            val chosen = selected == index
+            val fill by animateColorAsState(
+                if (chosen) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                HushMotion.standard(),
+                label = "tab",
             )
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(CircleShape)
+                    .background(fill)
+                    .selectable(selected = chosen, role = Role.Tab, onClick = { onSelect(index) }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (chosen) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }

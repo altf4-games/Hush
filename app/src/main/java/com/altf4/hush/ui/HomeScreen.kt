@@ -114,7 +114,8 @@ fun HomeScreen(
         item {
             HushCard(shape = MaterialTheme.shapes.extraLarge) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    ProtectionOrb(on = protectionOn, onClick = { onProtectionChange(!protectionOn) })
+                    // Kept modest so today's numbers are visible without scrolling.
+                    ProtectionOrb(on = protectionOn, onClick = { onProtectionChange(!protectionOn) }, size = 128.dp)
                     AnimatedContent(
                         targetState = protectionOn,
                         transitionSpec = { fadeIn(HushMotion.standard()) togetherWith fadeOut(HushMotion.standard()) },

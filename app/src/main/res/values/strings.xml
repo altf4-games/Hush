@@ -4,6 +4,10 @@
     <string name="accessibility_description">Closes the apps you choose during quiet hours. It only notices which app opened; it cannot read anything on screen.</string>
     <string name="widget_description">Blocked lookups today, with a switch for site blocking.</string>
     <string name="widget_blocked_today">blocked today</string>
+    <string name="widget_label_blocked">blocked</string>
+    <string name="widget_label_domains">domains</string>
+    <string name="widget_label_week">this week</string>
+    <string name="widget_chart_description">Blocked lookups for each of the last seven days</string>
     <string name="widget_protected">Protected</string>
     <string name="widget_paused">Paused</string>
     <string name="widget_turn_on">Turn site blocking on</string>
