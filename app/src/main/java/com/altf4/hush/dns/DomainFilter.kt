@@ -1,17 +1,20 @@
 package com.altf4.hush.dns
 
+import com.altf4.hush.data.NightClock
+
 /**
  * Everything the DNS service decides about a name. Allowed sites always win.
  *
  * Order of checks:
- *  1. [isBlocked] (every query, cheap): allow list, then hashed lists. A hashed-list hit can still
- *     be overridden by an allow pattern.
+ *  1. [isBlocked] (every query, cheap): allow list, then the quiet-hours list (only while the
+ *     window is active), then the hashed lists. A hit can still be overridden by an allow pattern.
  *  2. [isRegexBlocked] (only for names that passed 1 and missed the cache): allow list, allow
  *     patterns, then block patterns.
  *  3. [ResponseGuard] on the upstream reply, unless the name is allowed ([isAllowed]).
  *
  * @param uncloakCname block names whose CNAME chain reaches a blocked domain
  * @param blockRebinding block public names that answer with private addresses
+ * @param nightBlock names blocked only while [nightClock] says the quiet window is active
  */
 class DomainFilter(
     private val allow: Blocklist,
@@ -20,17 +23,25 @@ class DomainFilter(
     private val blockRegex: RegexRules = RegexRules.EMPTY,
     val uncloakCname: Boolean = true,
     val blockRebinding: Boolean = true,
+    private val nightBlock: Blocklist = Blocklist.EMPTY,
+    private val nightClock: NightClock? = null,
 ) {
     fun isAllowed(domain: ByteArray, len: Int): Boolean = allow.matches(domain, len)
 
     fun isBlocked(domain: ByteArray, len: Int): Boolean {
         if (allow.matches(domain, len)) return false
-        for (list in block) {
-            if (list.matches(domain, len)) {
-                return allowRegex.isEmpty() || !allowRegex.matches(text(domain, len))
+        var hit = nightClock != null && nightBlock.size > 0 &&
+            nightClock.isActive() && nightBlock.matches(domain, len)
+        if (!hit) {
+            for (list in block) {
+                if (list.matches(domain, len)) {
+                    hit = true
+                    break
+                }
             }
         }
-        return false
+        if (!hit) return false
+        return allowRegex.isEmpty() || !allowRegex.matches(text(domain, len))
     }
 
     fun isRegexBlocked(domain: ByteArray, len: Int): Boolean {

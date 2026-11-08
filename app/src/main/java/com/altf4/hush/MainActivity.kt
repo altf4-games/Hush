@@ -119,15 +119,14 @@ private fun HushApp(
             Box(Modifier.fillMaxSize().padding(inner)) {
                 when (HomeTab.entries[selected]) {
                     HomeTab.Night -> NightScreen(
-                        startMinutes = prefs.nightStartMinutes,
-                        endMinutes = prefs.nightEndMinutes,
+                        prefs = prefs,
                         themeMode = themeMode,
                         onThemeChange = {
                             themeMode = it
                             prefs.themeMode = it
                         },
                     )
-                    HomeTab.Apps -> AppsScreen()
+                    HomeTab.Apps -> AppsScreen(prefs)
                     HomeTab.Sites -> SitesScreen(
                         prefs = prefs,
                         protectionOn = VpnState.running,

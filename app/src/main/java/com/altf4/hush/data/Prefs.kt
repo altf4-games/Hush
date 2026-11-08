@@ -18,9 +18,34 @@ class Prefs(context: Context) {
         get() = ThemeMode.fromKey(sp.getString(K_THEME, null))
         set(value) = edit(bump = false) { putString(K_THEME, value.key) }
 
-    /** Quiet window as minutes after midnight. Display only for now; editing comes later. */
+    /** Quiet window as minutes after midnight. */
     val nightStartMinutes: Int get() = sp.getInt(K_NIGHT_START, DEFAULT_NIGHT_START)
     val nightEndMinutes: Int get() = sp.getInt(K_NIGHT_END, DEFAULT_NIGHT_END)
+
+    fun setNightWindow(startMinutes: Int, endMinutes: Int) = edit(bump = true) {
+        putInt(K_NIGHT_START, startMinutes)
+        putInt(K_NIGHT_END, endMinutes)
+    }
+
+    /** Master switch for the quiet window (app closing and quiet-hours-only sites). Off by default. */
+    var nightEnabled: Boolean
+        get() = sp.getBoolean(K_NIGHT_ON, false)
+        set(value) = edit(bump = true) { putBoolean(K_NIGHT_ON, value) }
+
+    /** Days the window starts on, as a bit mask (bit 0 = Monday ... bit 6 = Sunday). Every day by default. */
+    var nightDays: Int
+        get() = sp.getInt(K_NIGHT_DAYS, Schedule.ALL_DAYS)
+        set(value) = edit(bump = true) { putInt(K_NIGHT_DAYS, value and Schedule.ALL_DAYS) }
+
+    fun schedule(): Schedule = Schedule(nightEnabled, nightStartMinutes, nightEndMinutes, nightDays)
+
+    /** Package names of the apps closed during quiet hours. A setting the person chose, not usage data. */
+    fun blockedApps(): Set<String> = stringSet(K_APPS)
+
+    fun setAppBlocked(pkg: String, blocked: Boolean) = changeSet(K_APPS, pkg, blocked)
+
+    fun setBlockedApps(packages: Set<String>) =
+        edit(bump = true) { putStringSet(K_APPS, HashSet(packages)) }
 
     fun enabledLists(): Set<String> {
         val stored = sp.getStringSet(K_LISTS, null) ?: return ListCatalog.defaultEnabledIds
@@ -131,6 +156,9 @@ class Prefs(context: Context) {
         const val K_THEME = "theme"
         const val K_NIGHT_START = "night_start"
         const val K_NIGHT_END = "night_end"
+        const val K_NIGHT_ON = "night_enabled"
+        const val K_NIGHT_DAYS = "night_days"
+        const val K_APPS = "blocked_apps"
         const val K_LISTS = "lists_enabled"
         const val K_SOCIAL_PREFIX = "social_"
         const val K_CUSTOM = "custom_blocked"

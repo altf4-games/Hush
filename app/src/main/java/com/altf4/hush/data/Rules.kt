@@ -8,10 +8,7 @@ import com.altf4.hush.dns.RegexRules
 
 /** Turns settings and the downloaded lists into the filter the DNS service uses. */
 object Rules {
-    /**
-     * Domains of every social preset set to [SocialMode.Always], plus the user's own always-blocked
-     * sites. Quiet-hours-only presets are not included until the schedule is wired in (Phase 3).
-     */
+    /** Domains of every social preset set to [SocialMode.Always], plus the user's own always-blocked sites. */
     fun alwaysBlockedDomains(
         modeOf: (String) -> SocialMode,
         custom: Collection<String> = emptyList(),
@@ -19,6 +16,15 @@ object Rules {
         val domains = ArrayList<String>(custom)
         for (site in SocialSites.all) {
             if (modeOf(site.id) == SocialMode.Always) domains.addAll(site.domains)
+        }
+        return domains
+    }
+
+    /** Domains of every social preset set to [SocialMode.Night]; blocked only during the quiet window. */
+    fun nightBlockedDomains(modeOf: (String) -> SocialMode): List<String> {
+        val domains = ArrayList<String>()
+        for (site in SocialSites.all) {
+            if (modeOf(site.id) == SocialMode.Night) domains.addAll(site.domains)
         }
         return domains
     }
@@ -33,6 +39,8 @@ object Rules {
             blockRegex = RegexRules.of(prefs.regexBlock()),
             uncloakCname = prefs.uncloakCname,
             blockRebinding = prefs.blockRebinding,
+            nightBlock = Blocklist.build(nightBlockedDomains { prefs.socialMode(it) }),
+            nightClock = NightClock(prefs.schedule()),
         )
     }
 }

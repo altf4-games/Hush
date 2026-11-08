@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Hush</string>
+    <string name="accessibility_description">Closes the apps you choose during quiet hours. It only notices which app opened; it cannot read anything on screen.</string>
 </resources>

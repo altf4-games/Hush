@@ -25,6 +25,23 @@ class RulesTest {
         assertTrue("news.example.org" in domains)
     }
 
+    @Test fun onlyNightModeSitesAreInTheQuietHoursList() {
+        val domains = Rules.nightBlockedDomains { id ->
+            when (id) {
+                "instagram" -> SocialMode.Always
+                "tiktok" -> SocialMode.Night
+                else -> SocialMode.Off
+            }
+        }
+        assertTrue("tiktok.com" in domains)
+        assertFalse("instagram.com" in domains)
+        assertFalse("reddit.com" in domains)
+    }
+
+    @Test fun quietHoursListIsEmptyWhenNothingIsSetToNight() {
+        assertTrue(Rules.nightBlockedDomains { SocialMode.Always }.isEmpty())
+    }
+
     @Test fun nothingIsBlockedWhenEverythingIsOff() {
         assertTrue(Rules.alwaysBlockedDomains { SocialMode.Off }.isEmpty())
     }
