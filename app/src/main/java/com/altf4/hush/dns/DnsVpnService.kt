@@ -131,6 +131,7 @@ class DnsVpnService : VpnService() {
         val output = FileOutputStream(pfd.fileDescriptor)
         reader = Thread({ runLoop(input, output) }, "hush-tun").also { it.start() }
         VpnState.update(true)
+        ProtectionSurfaces.refresh(applicationContext)
         return true
     }
 
@@ -167,6 +168,7 @@ class DnsVpnService : VpnService() {
         }
         tun = null
         VpnState.update(false)
+        ProtectionSurfaces.refresh(applicationContext)
     }
 
     private fun runLoop(input: FileInputStream, output: FileOutputStream) {

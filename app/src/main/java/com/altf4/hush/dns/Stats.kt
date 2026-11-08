@@ -31,6 +31,9 @@ object Stats {
     var view by mutableStateOf(StatsView.EMPTY)
         private set
 
+    /** Called, with the lock held, after the counts are saved or cleared. Must return quickly. */
+    @Volatile var onSaved: (() -> Unit)? = null
+
     private val lock = Any()
     private var log = StatsLog()
     private var prefs: Prefs? = null
@@ -77,6 +80,7 @@ object Stats {
             sinceSave = 0
             prefs?.statsRaw = null
             publish(System.currentTimeMillis())
+            onSaved?.invoke()
         }
     }
 
@@ -89,12 +93,24 @@ object Stats {
         return cachedDay
     }
 
+    /** Today's counts as they stand now, for places outside the dashboard (the home screen widget). */
+    fun current(prefs: Prefs): StatsView {
+        val now = System.currentTimeMillis()
+        synchronized(lock) {
+            return if (loaded) viewOf(log, now) else viewOf(StatsLog.decode(prefs.statsRaw), now)
+        }
+    }
+
     private fun publish(now: Long) {
         lastPublish = now
+        view = viewOf(log, now)
+    }
+
+    private fun viewOf(log: StatsLog, now: Long): StatsView {
         val day = StatsLog.dayOf(now, TimeZone.getDefault().getOffset(now))
         val week = log.last(day)
         val today = log.on(day)
-        view = StatsView(
+        return StatsView(
             todayTotal = today.total,
             todayBlocked = today.blocked,
             lifetimeTotal = log.lifetimeTotal,
@@ -108,6 +124,7 @@ object Stats {
         sinceSave = 0
         lastSave = now
         prefs?.statsRaw = log.encode()
+        onSaved?.invoke()
     }
 
     private const val PUBLISH_MS = 1_000L

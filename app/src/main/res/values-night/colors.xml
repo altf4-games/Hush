@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Home screen widget, dark. -->
+    <color name="widget_surface">#171A22</color>
+    <color name="widget_text">#ECEEF3</color>
+    <color name="widget_text_dim">#9BA0B0</color>
+    <color name="widget_protected">#4ADE9A</color>
+    <color name="widget_paused">#F5B544</color>
+    <color name="widget_on_container">#4ADE9A</color>
+    <color name="widget_on_icon">#07251A</color>
+    <color name="widget_off_container">#2A2E3A</color>
+    <color name="widget_off_icon">#B5BAC9</color>
+</resources>

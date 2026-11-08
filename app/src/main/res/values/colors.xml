@@ -3,4 +3,15 @@
     <!-- Matches the dark theme background so launch does not flash white. -->
     <color name="window_background">#0A0C10</color>
     <color name="ic_launcher_background">#0A0C10</color>
+
+    <!-- Home screen widget, light. -->
+    <color name="widget_surface">#F1F2F8</color>
+    <color name="widget_text">#15171C</color>
+    <color name="widget_text_dim">#5C6070</color>
+    <color name="widget_protected">#12805A</color>
+    <color name="widget_paused">#946200</color>
+    <color name="widget_on_container">#12805A</color>
+    <color name="widget_on_icon">#FFFFFF</color>
+    <color name="widget_off_container">#DADCE8</color>
+    <color name="widget_off_icon">#4A4F60</color>
 </resources>
