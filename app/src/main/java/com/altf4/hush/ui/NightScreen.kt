@@ -71,28 +71,18 @@ private fun pickTime(context: Context, minutes: Int, onPicked: (Int) -> Unit) {
 }
 
 @Composable
-fun NightScreen(
-    prefs: Prefs,
-    themeMode: ThemeMode,
-    onThemeChange: (ThemeMode) -> Unit,
-    protectionOn: Boolean,
-    onProtectionChange: (Boolean) -> Unit,
-    onRestored: () -> Unit,
-) {
+fun NightScreen(prefs: Prefs) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(prefs.nightEnabled) }
     var start by remember { mutableIntStateOf(prefs.nightStartMinutes) }
     var end by remember { mutableIntStateOf(prefs.nightEndMinutes) }
     var days by remember { mutableIntStateOf(prefs.nightDays) }
     var strict by remember { mutableStateOf(prefs.strictMode) }
-    val appCount = remember { prefs.blockedApps().size }
 
     val schedule = Schedule(enabled, start, end, days)
     val status = remember(enabled, start, end, days) { describe(schedule, ZonedDateTime.now()) }
     // While the window runs, settings can only get stricter (see SettingsLock). Prefs enforces it too.
     val locked = remember(enabled, start, end, days, strict) { prefs.isLocked() }
-
-    val checklist = SetupChecklist.items(protectionOn, BlockerState.running, appCount, enabled)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -100,20 +90,6 @@ fun NightScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { ScreenHeader("Night lock", "Quiet hours for the apps you choose.") }
-
-        if (!SetupChecklist.isComplete(checklist)) {
-            item {
-                SetupCard(
-                    items = checklist,
-                    actions = mapOf(
-                        SetupItem.Id.Protection to ("Turn on" to { onProtectionChange(true) }),
-                        SetupItem.Id.Accessibility to (
-                            "Open" to { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-                            ),
-                    ),
-                )
-            }
-        }
 
         if (locked) {
             item {
@@ -257,32 +233,6 @@ fun NightScreen(
                             }
                         },
                     )
-                }
-            }
-        }
-
-        item { SectionLabel("Backup") }
-
-        item { BackupCard(prefs, onRestored) }
-
-        item { SectionLabel("Appearance") }
-
-        item {
-            HushCard {
-                Text(
-                    text = "Theme",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ThemeMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = themeMode == mode,
-                            onClick = { onThemeChange(mode) },
-                            label = { Text(mode.label) },
-                        )
-                    }
                 }
             }
         }

@@ -146,5 +146,7 @@ object ListCatalog {
         all.filter { it.category == category }
 
     /** Enabled on first run. */
-    val defaultEnabledIds: Set<String> = setOf("stevenblack", "blp_tracking", "phishing_army")
+    val defaultEnabledIds: Set<String> = setOf(
+        "stevenblack", "oisd_small", "adguard_dns", "blp_tracking", "easyprivacy", "phishing_army",
+    )
 }

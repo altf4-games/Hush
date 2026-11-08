@@ -7,9 +7,9 @@ import android.content.Context
 import java.util.concurrent.TimeUnit
 
 /**
- * Arms or cancels the opt-in weekly list update: one framework job, charging and unmetered
- * network only. Not persisted across reboot (that would need RECEIVE_BOOT_COMPLETED), so it is
- * re-armed whenever the app or the tunnel starts; the tunnel is restarted by Always-on VPN.
+ * Arms or cancels the weekly list update: one framework job, charging and unmetered network
+ * only. It is persisted across reboot (RECEIVE_BOOT_COMPLETED) and also re-armed whenever the app
+ * or the tunnel starts. Scheduling can never crash the caller.
  */
 object UpdateScheduler {
     private const val JOB_ID = 4201
@@ -26,7 +26,12 @@ object UpdateScheduler {
             .setRequiresCharging(true)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
             .setPeriodic(TimeUnit.DAYS.toMillis(7))
+            .setPersisted(true)
             .build()
-        scheduler.schedule(job)
+        try {
+            scheduler.schedule(job)
+        } catch (e: RuntimeException) {
+            // Scheduling is a convenience; a refusal must not take the VPN down with it.
+        }
     }
 }

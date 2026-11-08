@@ -61,6 +61,7 @@ object ListUpdater {
 
         val buffer = HashBuffer()
         val digests = HashMap<String, String>()
+        val counts = HashMap<String, Int>()
         for (source in sources) {
             val before = buffer.size
             val sha = try {
@@ -75,11 +76,12 @@ object ListUpdater {
                 return Outcome(false, "The selected lists are too large. Previous lists kept.")
             }
             digests[source.id] = sha
+            counts[source.id] = buffer.size - before
         }
 
         val hashes = buffer.sortedUnique()
         Blocklist.writeFile(ListStore.file(context), hashes)
-        prefs.commitListUpdate(System.currentTimeMillis(), hashes.size, digests)
+        prefs.commitListUpdate(System.currentTimeMillis(), hashes.size, digests, counts)
         return Outcome(true, "Updated: ${"%,d".format(hashes.size)} domains")
     }
 

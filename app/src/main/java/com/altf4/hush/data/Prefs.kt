@@ -66,6 +66,14 @@ class Prefs(context: Context) {
         return true
     }
 
+    /**
+     * Whether protection was on when the phone last ran, so it can be restarted after a reboot.
+     * Device state, not a setting: it is not part of backups and does not bump [version].
+     */
+    var protectionWanted: Boolean
+        get() = sp.getBoolean(K_PROTECTION, false)
+        set(value) = edit(bump = false) { putBoolean(K_PROTECTION, value) }
+
     fun schedule(): Schedule = Schedule(nightEnabled, nightStartMinutes, nightEndMinutes, nightDays)
 
     /** Package names of the apps closed during quiet hours. A setting the person chose, not usage data. */
@@ -140,9 +148,9 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_BYPASS, false)
         set(value) = edit(bump = true) { putBoolean(K_BYPASS, value) }
 
-    /** Opt-in weekly list update (charging + unmetered network only). Off by default. */
+    /** Weekly list update (charging + unmetered network only). On by default. */
     var weeklyUpdate: Boolean
-        get() = sp.getBoolean(K_WEEKLY, false)
+        get() = sp.getBoolean(K_WEEKLY, true)
         set(value) = edit(bump = false) { putBoolean(K_WEEKLY, value) }
 
     /** When the lists were last downloaded (millis), or 0 if never. Shown in the UI. */
@@ -154,14 +162,30 @@ class Prefs(context: Context) {
     /** SHA-256 (hex) of the last download of a catalog list, or null. */
     fun listSha(id: String): String? = sp.getString(K_SHA_PREFIX + id, null)
 
+    /** Entries each catalog list contributed to the last download, or 0 if unknown. */
+    fun listCount(id: String): Int = sp.getInt(K_COUNT_PREFIX + id, 0)
+
+    /** Saved dashboard counters (numbers only). Device state: not in backups, no version bump. */
+    var statsRaw: String?
+        get() = sp.getString(K_STATS, null)
+        set(value) = edit(bump = false) { if (value == null) remove(K_STATS) else putString(K_STATS, value) }
+
     /** Records a finished update and bumps the version so the service reloads. */
-    fun commitListUpdate(updatedAt: Long, count: Int, shas: Map<String, String>) =
-        edit(bump = true) {
-            putLong(K_LISTS_UPDATED, updatedAt)
-            putInt(K_LISTS_COUNT, count)
-            for (source in ListCatalog.all) remove(K_SHA_PREFIX + source.id)
-            for ((id, sha) in shas) putString(K_SHA_PREFIX + id, sha)
+    fun commitListUpdate(
+        updatedAt: Long,
+        count: Int,
+        shas: Map<String, String>,
+        counts: Map<String, Int> = emptyMap(),
+    ) = edit(bump = true) {
+        putLong(K_LISTS_UPDATED, updatedAt)
+        putInt(K_LISTS_COUNT, count)
+        for (source in ListCatalog.all) {
+            remove(K_SHA_PREFIX + source.id)
+            remove(K_COUNT_PREFIX + source.id)
         }
+        for ((id, sha) in shas) putString(K_SHA_PREFIX + id, sha)
+        for ((id, n) in counts) putInt(K_COUNT_PREFIX + id, n)
+    }
 
     /** Everything that goes into a backup file. */
     fun snapshot(): SettingsSnapshot = SettingsSnapshot(
@@ -251,6 +275,9 @@ class Prefs(context: Context) {
         const val K_NIGHT_DAYS = "night_days"
         const val K_APPS = "blocked_apps"
         const val K_STRICT = "strict_mode"
+        const val K_PROTECTION = "protection_wanted"
+        const val K_STATS = "stats"
+        const val K_COUNT_PREFIX = "list_count_"
         const val K_LISTS = "lists_enabled"
         const val K_SOCIAL_PREFIX = "social_"
         const val K_CUSTOM = "custom_blocked"

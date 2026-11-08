@@ -4,6 +4,12 @@
     <!-- Used only for DNS forwarding and blocklist downloads from the fixed catalog. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Needed for the weekly list update, which runs only on an unmetered network. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Restarts site blocking after a reboot if it was on. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!--
         Lets the app picker list launcher apps without QUERY_ALL_PACKAGES, and recognise the home
         launcher and phone app so they can be left out of the picker.
@@ -50,6 +56,16 @@
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
+
+        <!-- Brings the DNS VPN back after a reboot or an app update, if it was on. -->
+        <receiver
+            android:name=".dns.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Closes chosen apps during quiet hours. Window changes only; reads no screen content. -->
         <service

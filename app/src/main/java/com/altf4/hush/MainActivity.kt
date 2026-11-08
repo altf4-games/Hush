@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -38,8 +40,10 @@ import com.altf4.hush.dns.UpdateScheduler
 import com.altf4.hush.dns.VpnState
 import com.altf4.hush.ui.AppsScreen
 import com.altf4.hush.ui.HushTheme
+import com.altf4.hush.ui.FiltersScreen
+import com.altf4.hush.ui.HomeScreen
 import com.altf4.hush.ui.NightScreen
-import com.altf4.hush.ui.SitesScreen
+import com.altf4.hush.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
     // The system asks the user once to allow the VPN; start the service if they accept.
@@ -86,9 +90,11 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class HomeTab(val label: String, val icon: ImageVector) {
-    Night("Night lock", Icons.Filled.Lock),
+    Home("Home", Icons.Filled.Home),
+    Filters("Filters", Icons.Filled.List),
+    Night("Night", Icons.Filled.Lock),
     Apps("Apps", Icons.Filled.Menu),
-    Sites("Sites", Icons.Filled.Search),
+    Settings("Settings", Icons.Filled.Settings),
 }
 
 @Composable
@@ -123,15 +129,29 @@ private fun HushApp(
             Box(Modifier.fillMaxSize().padding(inner)) {
                 key(restoreCount) {
                     when (HomeTab.entries[selected]) {
-                        HomeTab.Night -> NightScreen(
+                        HomeTab.Home -> HomeScreen(
+                            prefs = prefs,
+                            protectionOn = VpnState.running,
+                            onProtectionChange = onProtectionChange,
+                            onUpdateNow = onUpdateNow,
+                            onOpenFilters = { selected = HomeTab.Filters.ordinal },
+                            onOpenApps = { selected = HomeTab.Apps.ordinal },
+                            onOpenNight = { selected = HomeTab.Night.ordinal },
+                        )
+                        HomeTab.Filters -> FiltersScreen(
+                            prefs = prefs,
+                            onUpdateNow = onUpdateNow,
+                            onWeeklyChange = onWeeklyChange,
+                        )
+                        HomeTab.Night -> NightScreen(prefs)
+                        HomeTab.Apps -> AppsScreen(prefs)
+                        HomeTab.Settings -> SettingsScreen(
                             prefs = prefs,
                             themeMode = themeMode,
                             onThemeChange = {
                                 themeMode = it
                                 prefs.themeMode = it
                             },
-                            protectionOn = VpnState.running,
-                            onProtectionChange = onProtectionChange,
                             onRestored = {
                                 // Settings were replaced from a file: refresh what the screens and
                                 // services hold, and re-arm the weekly update if it is now on.
@@ -140,14 +160,6 @@ private fun HushApp(
                                 onWeeklyChange(prefs.weeklyUpdate)
                                 restoreCount++
                             },
-                        )
-                        HomeTab.Apps -> AppsScreen(prefs)
-                        HomeTab.Sites -> SitesScreen(
-                            prefs = prefs,
-                            protectionOn = VpnState.running,
-                            onProtectionChange = onProtectionChange,
-                            onUpdateNow = onUpdateNow,
-                            onWeeklyChange = onWeeklyChange,
                         )
                     }
                 }

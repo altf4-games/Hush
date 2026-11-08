@@ -50,6 +50,7 @@ class DnsVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            Prefs(applicationContext).protectionWanted = false
             shutdown()
             stopSelf()
             return START_NOT_STICKY
@@ -62,6 +63,7 @@ class DnsVpnService : VpnService() {
     }
 
     override fun onRevoke() {
+        Prefs(applicationContext).protectionWanted = false // the person turned the VPN off elsewhere
         shutdown()
         super.onRevoke()
     }
@@ -87,6 +89,10 @@ class DnsVpnService : VpnService() {
         if (pfd == null) return false
 
         val prefs = Prefs(applicationContext)
+        prefs.protectionWanted = true
+        Stats.attach(prefs)
+        // Until a first download, only a tiny starter list is in force: fetch the real ones now.
+        if (prefs.listsUpdatedAt == 0L) ListUpdater.runAsync(applicationContext)
         filter = Rules.build(applicationContext, prefs)
         // Settings and list updates bump a version counter; rebuild only when it changes. Cached
         // replies were vetted under the old rules, so they are dropped too.
@@ -116,6 +122,7 @@ class DnsVpnService : VpnService() {
 
     private fun shutdown() {
         running = false
+        Stats.flush()
         versionHandle?.close()
         versionHandle = null
         reader?.interrupt()
@@ -166,6 +173,7 @@ class DnsVpnService : VpnService() {
         if (q.dstIp != DnsPacket.DNS_SERVER_IP || q.dstPort != DnsPacket.DNS_PORT) return
 
         if (filter.isBlocked(q.domain, q.domainLen)) {
+            Stats.record(blocked = true)
             writeTun(output, out, DnsPacket.buildBlockedPacket(buf, q, out))
             return
         }
@@ -175,6 +183,7 @@ class DnsVpnService : VpnService() {
         val key = cache.key(buf, q.dnsOffset, q.dnsLength)
         val cachedLen = cache.get(key, buf[q.dnsOffset], buf[q.dnsOffset + 1], out, DnsPacket.HEADERS_LEN)
         if (cachedLen > 0) {
+            Stats.record(blocked = false)
             val total = DnsPacket.finishPacket(out, q.dstIp, q.dstPort, q.srcIp, q.srcPort, cachedLen)
             writeTun(output, out, total)
             return
@@ -200,6 +209,7 @@ class DnsVpnService : VpnService() {
             val out = workerBuffer.get()!!
 
             if (rules.isRegexBlocked(job.domain, job.domain.size)) {
+                Stats.record(blocked = true)
                 replyError(job, out, output, DnsPacket.RCODE_NXDOMAIN)
                 return
             }
@@ -207,6 +217,7 @@ class DnsVpnService : VpnService() {
             val dot = resolver ?: return
             val replyLen = dot.resolve(job.payload, job.payload.size, out, DnsPacket.HEADERS_LEN)
             if (replyLen <= 0) {
+                Stats.record(blocked = false)
                 // Fail closed: nothing is ever sent in cleartext. Answer SERVFAIL right away so
                 // apps fail fast instead of waiting out their own timeout.
                 replyError(job, out, output, DnsPacket.RCODE_SERVFAIL)
@@ -216,9 +227,11 @@ class DnsVpnService : VpnService() {
             if (!rules.isAllowed(job.domain, job.domain.size) &&
                 ResponseGuard.shouldBlock(out, DnsPacket.HEADERS_LEN, replyLen, rules, workerScratch.get()!!)
             ) {
+                Stats.record(blocked = true)
                 replyError(job, out, output, DnsPacket.RCODE_NXDOMAIN)
                 return
             }
+            Stats.record(blocked = false)
 
             cache.put(job.cacheKey, out, DnsPacket.HEADERS_LEN, replyLen)
             val total = DnsPacket.finishPacket(
