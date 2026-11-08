@@ -172,6 +172,9 @@ class Prefs(context: Context) {
     /** When the lists were last downloaded (millis), or 0 if never. Shown in the UI. */
     val listsUpdatedAt: Long get() = sp.getLong(K_LISTS_UPDATED, 0L)
 
+    /** True when the last download skipped some lists (first run only), so a retry is still due. */
+    val listsIncomplete: Boolean get() = sp.getBoolean(K_LISTS_INCOMPLETE, false)
+
     /** Number of unique domains in the downloaded lists. */
     val listsEntryCount: Int get() = sp.getInt(K_LISTS_COUNT, 0)
 
@@ -192,8 +195,10 @@ class Prefs(context: Context) {
         count: Int,
         shas: Map<String, String>,
         counts: Map<String, Int> = emptyMap(),
+        incomplete: Boolean = false,
     ) = edit(bump = true) {
         putLong(K_LISTS_UPDATED, updatedAt)
+        putBoolean(K_LISTS_INCOMPLETE, incomplete)
         putInt(K_LISTS_COUNT, count)
         for (source in ListCatalog.all) {
             remove(K_SHA_PREFIX + source.id)
@@ -311,6 +316,7 @@ class Prefs(context: Context) {
         const val K_BYPASS = "block_bypass"
         const val K_LISTS_UPDATED = "lists_updated_at"
         const val K_LISTS_COUNT = "lists_count"
+        const val K_LISTS_INCOMPLETE = "lists_incomplete"
         const val K_SHA_PREFIX = "sha_"
         const val DEFAULT_NIGHT_START = 23 * 60
         const val DEFAULT_NIGHT_END = 6 * 60

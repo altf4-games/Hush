@@ -31,12 +31,33 @@ object ListUpdater {
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
 
+    private const val RETRY_MS = 60L * 60 * 1000
+
     private val busy = AtomicBoolean(false)
+    private var lastRetry = 0L
 
     /** Runs [update] on a new thread. Safe to call from the UI. */
     fun runAsync(context: Context) {
         val app = context.applicationContext
         Thread({ update(app) }, "hush-lists").start()
+    }
+
+    /**
+     * Downloads the lists if none have been fetched yet, or only some of them (a first run that
+     * could not reach every host). Called when the app opens and when protection starts, so a new
+     * install never stays on the tiny starter list. A first download starts at once; retrying an
+     * incomplete one waits an hour between tries.
+     */
+    @Synchronized
+    fun runIfNeeded(context: Context) {
+        val app = context.applicationContext
+        val prefs = Prefs(app)
+        val never = prefs.listsUpdatedAt == 0L
+        if (!never && !prefs.listsIncomplete) return
+        val now = System.currentTimeMillis()
+        if (!never && now - lastRetry < RETRY_MS) return
+        lastRetry = now
+        runAsync(app)
     }
 
     /** Blocking. Call off the main thread. Only one update runs at a time. */
@@ -59,18 +80,29 @@ object ListUpdater {
         val enabled = prefs.enabledLists()
         val sources = ListCatalog.all.filter { it.id in enabled }
 
+        // Once a full set is in place, an update is all-or-nothing so a blip never drops a list. Until
+        // then (first run, or a run that missed some) whatever can be fetched is better than the
+        // starter list, and the rest is retried.
+        val lenient = prefs.listsUpdatedAt == 0L || prefs.listsIncomplete
+
         val buffer = HashBuffer()
         val digests = HashMap<String, String>()
         val counts = HashMap<String, Int>()
+        var skipped = 0
         for (source in sources) {
             val before = buffer.size
             val sha = try {
                 download(source, buffer)
             } catch (e: Exception) {
-                return Outcome(false, "Could not download ${source.name}. Previous lists kept.")
+                if (!lenient) return Outcome(false, "Could not download ${source.name}. Previous lists kept.")
+                buffer.truncate(before)
+                skipped++
+                continue
             }
             if (buffer.size == before) {
-                return Outcome(false, "${source.name} had no usable entries. Previous lists kept.")
+                if (!lenient) return Outcome(false, "${source.name} had no usable entries. Previous lists kept.")
+                skipped++
+                continue
             }
             if (buffer.size > MAX_ENTRIES) {
                 return Outcome(false, "The selected lists are too large. Previous lists kept.")
@@ -79,10 +111,16 @@ object ListUpdater {
             counts[source.id] = buffer.size - before
         }
 
+        if (digests.isEmpty()) return Outcome(false, "Could not reach any list. Check your connection.")
+
         val hashes = buffer.sortedUnique()
         Blocklist.writeFile(ListStore.file(context), hashes)
-        prefs.commitListUpdate(System.currentTimeMillis(), hashes.size, digests, counts)
-        return Outcome(true, "Updated: ${"%,d".format(hashes.size)} domains")
+        prefs.commitListUpdate(System.currentTimeMillis(), hashes.size, digests, counts, incomplete = skipped > 0)
+        val total = "%,d".format(hashes.size)
+        return Outcome(
+            true,
+            if (skipped == 0) "Updated: $total domains" else "Updated: $total domains. $skipped lists will be retried.",
+        )
     }
 
     /** Streams one list into [sink] and returns the SHA-256 (hex) of the downloaded bytes. */

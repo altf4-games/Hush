@@ -15,6 +15,11 @@ class HashBuffer(initialCapacity: Int = 1 shl 16) {
         data[size++] = hash
     }
 
+    /** Drops everything added after the first [newSize] hashes (to discard a half-read list). */
+    fun truncate(newSize: Int) {
+        if (newSize in 0..size) size = newSize
+    }
+
     /** Sorted ascending with duplicates removed. */
     fun sortedUnique(): LongArray {
         Arrays.sort(data, 0, size)

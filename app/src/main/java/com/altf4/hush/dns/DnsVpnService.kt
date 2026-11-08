@@ -102,7 +102,7 @@ class DnsVpnService : VpnService() {
         prefs.protectionWanted = true
         Stats.attach(prefs)
         // Until a first download, only a tiny starter list is in force: fetch the real ones now.
-        if (prefs.listsUpdatedAt == 0L) ListUpdater.runAsync(applicationContext)
+        ListUpdater.runIfNeeded(applicationContext)
         filter = Rules.build(applicationContext, prefs)
         // Settings and list updates bump a version counter; rebuild only when it changes. Cached
         // replies were vetted under the old rules, so they are dropped too.

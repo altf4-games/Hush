@@ -63,6 +63,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         // Re-arm the weekly update if it is on (it does not survive a reboot on its own).
         UpdateScheduler.sync(applicationContext, prefs.weeklyUpdate)
+        // First launch: fetch the real lists now instead of waiting for the weekly job.
+        ListUpdater.runIfNeeded(applicationContext)
         setContent {
             HushApp(
                 prefs = prefs,

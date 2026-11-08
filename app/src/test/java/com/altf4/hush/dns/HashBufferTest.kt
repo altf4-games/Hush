@@ -25,6 +25,16 @@ class HashBufferTest {
         assertEquals(999L, sorted.last())
     }
 
+    @Test fun truncateDiscardsAHalfReadList() {
+        val buffer = HashBuffer(16)
+        for (v in longArrayOf(1, 2, 3, 40, 50)) buffer.add(v)
+        buffer.truncate(3)
+        assertEquals(3, buffer.size)
+        assertArrayEquals(longArrayOf(1, 2, 3), buffer.sortedUnique())
+        buffer.truncate(10) // cannot grow
+        assertEquals(3, buffer.size)
+    }
+
     @Test fun emptyBufferGivesEmptyArray() {
         assertEquals(0, HashBuffer().sortedUnique().size)
     }

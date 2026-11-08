@@ -46,6 +46,7 @@ import com.altf4.hush.block.BlockerState
 import com.altf4.hush.data.Onboarding
 import com.altf4.hush.data.Onboarding.Step
 import com.altf4.hush.data.Prefs
+import com.altf4.hush.dns.UpdateStatus
 import com.altf4.hush.data.PrivateDnsMode
 import com.altf4.hush.dns.DnsProvider
 
@@ -119,7 +120,7 @@ fun OnboardingScreen(
                     Step.PrivateDns -> PrivateDnsPage(privateDns, onOpen = { openNetworkSettings(context) })
                     Step.NightLock -> NightLockPage(accessibilityOn, openedAccessibility, onOpenAppInfo = { openAppInfo(context) })
                     Step.Battery -> BatteryPage(battery)
-                    Step.Done -> DonePage(protectionOn, provider, privateDns, accessibilityOn)
+                    Step.Done -> DonePage(prefs, protectionOn, provider, privateDns, accessibilityOn)
                 }
             }
         }
@@ -346,7 +347,9 @@ private fun BatteryPage(unrestricted: Boolean) {
 }
 
 @Composable
-private fun DonePage(protectionOn: Boolean, provider: DnsProvider, privateDns: PrivateDnsMode, accessibilityOn: Boolean) {
+private fun DonePage(prefs: Prefs, protectionOn: Boolean, provider: DnsProvider, privateDns: PrivateDnsMode, accessibilityOn: Boolean) {
+    val updating = UpdateStatus.running
+    val domains = remember(updating) { prefs.listsEntryCount }
     PageHeader(
         HushIcons.ShieldCheck,
         if (protectionOn) "You're all set" else "Almost there",
@@ -356,6 +359,12 @@ private fun DonePage(protectionOn: Boolean, provider: DnsProvider, privateDns: P
         SummaryRow("Site blocking", if (protectionOn) "On" else "Off", protectionOn)
         GroupDivider()
         SummaryRow("DNS server", "${provider.label}, encrypted", true)
+        GroupDivider()
+        SummaryRow(
+            "Blocklists",
+            if (updating) "Downloading…" else if (domains > 0) "${compactCount(domains)} domains" else "Not downloaded yet",
+            !updating && domains > 0,
+        )
         GroupDivider()
         SummaryRow("Private DNS", if (privateDns.bypassesHush) "Needs changing" else "OK", !privateDns.bypassesHush)
         GroupDivider()
