@@ -1,5 +1,6 @@
 package com.altf4.hush.data
 
+import com.altf4.hush.dns.DnsProvider
 import com.altf4.hush.dns.ListCatalog
 import com.altf4.hush.dns.SafeRegex
 
@@ -22,6 +23,7 @@ data class SettingsSnapshot(
     val rebinding: Boolean,
     val bypass: Boolean,
     val weekly: Boolean,
+    val dns: DnsProvider = DnsProvider.DEFAULT,
 )
 
 /** The outcome of reading a backup file: a snapshot, or one short reason it was refused. */
@@ -37,6 +39,9 @@ sealed class BackupResult {
  *
  * Format: first line `hush-settings 1`, then one `key<TAB>value` line per setting; list-like
  * settings repeat their key. Values may not contain tabs or line breaks.
+ *
+ * `dns` is optional so files saved before the DNS server choice existed still load; when it is
+ * missing the default server is used.
  */
 object SettingsBackup {
     const val HEADER = "hush-settings 1"
@@ -51,6 +56,7 @@ object SettingsBackup {
         "theme", "night_enabled", "night_start", "night_end", "night_days", "strict",
         "uncloak", "rebinding", "bypass", "weekly",
     )
+    private const val DNS_KEY = "dns"
 
     fun encode(s: SettingsSnapshot): String {
         val out = StringBuilder(HEADER).append('\n')
@@ -70,6 +76,7 @@ object SettingsBackup {
         flag("rebinding", s.rebinding)
         flag("bypass", s.bypass)
         flag("weekly", s.weekly)
+        line(DNS_KEY, s.dns.key)
         for (id in s.social.keys.sorted()) line("social", "$id:${s.social.getValue(id).key}")
         for (v in s.lists.sorted()) line("list", v)
         for (v in s.apps.sorted()) line("app", v)
@@ -86,6 +93,7 @@ object SettingsBackup {
         if (lines.firstOrNull() != HEADER) return refuse("This is not a Hush settings file")
 
         val scalars = HashMap<String, String>()
+        var dnsKey: String? = null
         val social = LinkedHashMap<String, SocialMode>()
         val lists = LinkedHashSet<String>()
         val apps = LinkedHashSet<String>()
@@ -102,6 +110,10 @@ object SettingsBackup {
             if (value.isEmpty() || value.indexOf('\t') >= 0) return refuse("A value could not be read")
             when (key) {
                 in SCALARS -> if (scalars.put(key, value) != null) return refuse("A setting appears twice")
+                DNS_KEY -> {
+                    if (dnsKey != null) return refuse("A setting appears twice")
+                    dnsKey = value
+                }
                 "social" -> {
                     val colon = value.indexOf(':')
                     if (colon <= 0) return refuse("A site choice could not be read")
@@ -163,6 +175,12 @@ object SettingsBackup {
             return refuse("A switch has an unexpected value")
         }
 
+        val dns = if (dnsKey == null) {
+            DnsProvider.DEFAULT
+        } else {
+            DnsProvider.entries.firstOrNull { it.key == dnsKey } ?: return refuse("An unknown DNS server")
+        }
+
         // A preset that is not mentioned stays off.
         val allSocial = SocialSites.all.associate { it.id to (social[it.id] ?: SocialMode.Off) }
 
@@ -185,6 +203,7 @@ object SettingsBackup {
                 rebinding = rebinding,
                 bypass = bypass,
                 weekly = weekly,
+                dns = dns,
             ),
         )
     }

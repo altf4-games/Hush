@@ -1,5 +1,6 @@
 package com.altf4.hush.data
 
+import com.altf4.hush.dns.DnsProvider
 import com.altf4.hush.dns.ListCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -27,6 +28,7 @@ class SettingsBackupTest {
         rebinding = false,
         bypass = true,
         weekly = true,
+        dns = DnsProvider.Cloudflare,
     )
 
     private fun decoded(text: String): BackupResult = SettingsBackup.decode(text)
@@ -86,6 +88,23 @@ class SettingsBackupTest {
         for (key in listOf("theme", "night_enabled", "night_start", "night_end", "night_days", "strict", "weekly")) {
             assertTrue("missing $key", refused(edited(key)))
         }
+    }
+
+    @Test fun everyDnsServerRoundTrips() {
+        for (p in DnsProvider.entries) {
+            val result = decoded(SettingsBackup.encode(sample().copy(dns = p))) as BackupResult.Ok
+            assertEquals(p, result.snapshot.dns)
+        }
+    }
+
+    @Test fun olderFileWithoutDnsServerUsesTheDefault() {
+        val snapshot = (decoded(edited("dns")) as BackupResult.Ok).snapshot
+        assertEquals(DnsProvider.DEFAULT, snapshot.dns)
+    }
+
+    @Test fun unknownOrRepeatedDnsServerIsRefused() {
+        assertTrue(refused(edited("dns", "dns\texample")))
+        assertTrue(refused(withExtra("dns\tgoogle")))
     }
 
     @Test fun repeatedScalarIsRefused() {
@@ -158,7 +177,7 @@ class SettingsBackupTest {
         val keys = text.lines().drop(1).filter { it.isNotEmpty() }.map { it.substringBefore('\t') }.toSet()
         val allowedKeys = setOf(
             "theme", "night_enabled", "night_start", "night_end", "night_days", "strict", "uncloak",
-            "rebinding", "bypass", "weekly", "social", "list", "app", "custom", "allowed",
+            "rebinding", "bypass", "weekly", "dns", "social", "list", "app", "custom", "allowed",
             "regex_block", "regex_allow",
         )
         assertTrue(allowedKeys.containsAll(keys))

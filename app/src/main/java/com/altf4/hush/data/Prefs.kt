@@ -222,6 +222,7 @@ class Prefs(context: Context) {
         rebinding = blockRebinding,
         bypass = blockBypass,
         weekly = weeklyUpdate,
+        dns = dnsProvider,
     )
 
     /**
@@ -249,6 +250,7 @@ class Prefs(context: Context) {
             putBoolean(K_REBINDING, s.rebinding)
             putBoolean(K_BYPASS, s.bypass)
             putBoolean(K_WEEKLY, s.weekly)
+            putString(K_DNS, s.dns.key)
         }
         return true
     }
