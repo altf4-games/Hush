@@ -32,7 +32,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.altf4.hush.data.Prefs
 import com.altf4.hush.ui.HushTheme
-import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 /** What the block screen offers about the emergency pass. [phase] is null when there is no app to ask about. */
@@ -57,7 +56,7 @@ class BlockActivity : ComponentActivity() {
         enableEdgeToEdge()
         target = intent?.getStringExtra(EXTRA_PACKAGE)
         refreshPass()
-        val until = prefs.schedule().nextChange(ZonedDateTime.now())
+        val until = prefs.schedule().nextChange(prefs.now())
             ?.format(DateTimeFormatter.ofPattern("HH:mm"))
         setContent {
             HushTheme(prefs.themeMode) {

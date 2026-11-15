@@ -71,12 +71,31 @@ fun OnboardingScreen(
     val accessibilityOn = BlockerState.running
     var provider by remember { mutableStateOf(prefs.dnsProvider) }
     var openedAccessibility by rememberSaveable { mutableStateOf(false) }
+    var committed by remember { mutableStateOf(prefs.nightCommitted) }
+    var confirmLock by remember { mutableStateOf(false) }
+    var start by remember { mutableStateOf(prefs.nightStartMinutes) }
+    var end by remember { mutableStateOf(prefs.nightEndMinutes) }
+    var days by remember { mutableStateOf(prefs.nightDays) }
 
     fun next() {
         if (index < Onboarding.steps.lastIndex) index++ else onFinish()
     }
 
     BackHandler(enabled = index > 0) { index-- }
+
+    if (confirmLock) {
+        LockScheduleDialog(
+            onConfirm = {
+                confirmLock = false
+                prefs.setNightEnabled(true)
+                if (prefs.commitNight()) {
+                    committed = true
+                    next()
+                }
+            },
+            onDismiss = { confirmLock = false },
+        )
+    }
 
     Column(
         Modifier
@@ -119,8 +138,17 @@ fun OnboardingScreen(
                     }
                     Step.PrivateDns -> PrivateDnsPage(privateDns, onOpen = { openNetworkSettings(context) })
                     Step.NightLock -> NightLockPage(accessibilityOn, openedAccessibility, onOpenAppInfo = { openAppInfo(context) })
+                    Step.Schedule -> SchedulePage(
+                        start = start,
+                        end = end,
+                        days = days,
+                        committed = committed,
+                        onStart = { if (prefs.setNightWindow(it, end)) start = it },
+                        onEnd = { if (prefs.setNightWindow(start, it)) end = it },
+                        onDays = { if (prefs.setNightDays(it)) days = it },
+                    )
                     Step.Battery -> BatteryPage(battery)
-                    Step.Done -> DonePage(prefs, protectionOn, provider, privateDns, accessibilityOn)
+                    Step.Done -> DonePage(prefs, protectionOn, provider, privateDns, accessibilityOn, committed)
                 }
             }
         }
@@ -144,6 +172,12 @@ fun OnboardingScreen(
                         openedAccessibility = true
                         openAccessibilitySettings(context)
                     }
+                    Secondary("Not now") { next() }
+                }
+                Step.Schedule -> if (committed) {
+                    Primary("Continue") { next() }
+                } else {
+                    Primary("Lock this schedule") { confirmLock = true }
                     Secondary("Not now") { next() }
                 }
                 Step.Battery -> if (battery) {
@@ -324,6 +358,28 @@ private fun NightLockPage(on: Boolean, opened: Boolean, onOpenAppInfo: () -> Uni
 }
 
 @Composable
+private fun SchedulePage(
+    start: Int,
+    end: Int,
+    days: Int,
+    committed: Boolean,
+    onStart: (Int) -> Unit,
+    onEnd: (Int) -> Unit,
+    onDays: (Int) -> Unit,
+) {
+    PageHeader(
+        HushIcons.Moon,
+        "Quiet hours",
+        "Choose when the apps you pick should close. This is the only time you can set it: once locked, the times cannot be changed.",
+        optional = true,
+    )
+    if (committed) {
+        CheckLine(true, "Schedule locked", "Pick the apps to close in the Night tab.")
+    }
+    ScheduleCard(start, end, days, editable = !committed, onStart = onStart, onEnd = onEnd, onDays = onDays)
+}
+
+@Composable
 private fun BatteryPage(unrestricted: Boolean) {
     PageHeader(
         HushIcons.Battery,
@@ -347,7 +403,7 @@ private fun BatteryPage(unrestricted: Boolean) {
 }
 
 @Composable
-private fun DonePage(prefs: Prefs, protectionOn: Boolean, provider: DnsProvider, privateDns: PrivateDnsMode, accessibilityOn: Boolean) {
+private fun DonePage(prefs: Prefs, protectionOn: Boolean, provider: DnsProvider, privateDns: PrivateDnsMode, accessibilityOn: Boolean, scheduleLocked: Boolean) {
     val updating = UpdateStatus.running
     val domains = remember(updating) { prefs.listsEntryCount }
     PageHeader(
@@ -369,6 +425,8 @@ private fun DonePage(prefs: Prefs, protectionOn: Boolean, provider: DnsProvider,
         SummaryRow("Private DNS", if (privateDns.bypassesHush) "Needs changing" else "OK", !privateDns.bypassesHush)
         GroupDivider()
         SummaryRow("Night lock", if (accessibilityOn) "Ready" else "Not set up", accessibilityOn)
+        GroupDivider()
+        SummaryRow("Quiet hours", if (scheduleLocked) "Locked" else "Not set", scheduleLocked)
     }
 }
 

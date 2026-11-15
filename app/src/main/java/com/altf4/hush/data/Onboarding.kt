@@ -31,7 +31,7 @@ enum class PrivateDnsMode {
 
 /** The first-run setup pages, in order. Pure: the facts are passed in so this stays testable. */
 object Onboarding {
-    enum class Step { Welcome, Protection, Dns, PrivateDns, NightLock, Battery, Done }
+    enum class Step { Welcome, Protection, Dns, PrivateDns, NightLock, Schedule, Battery, Done }
 
     val steps: List<Step> = Step.entries
 
@@ -42,12 +42,14 @@ object Onboarding {
         privateDns: PrivateDnsMode,
         accessibilityOn: Boolean,
         batteryUnrestricted: Boolean = false,
+        scheduleLocked: Boolean = false,
     ): Boolean =
         when (step) {
             Step.Welcome, Step.Dns, Step.Done -> true
             Step.Protection -> protectionOn
             Step.PrivateDns -> !privateDns.bypassesHush
             Step.NightLock -> accessibilityOn
+            Step.Schedule -> scheduleLocked
             Step.Battery -> batteryUnrestricted
         }
 

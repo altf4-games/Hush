@@ -31,6 +31,7 @@ object Rules {
     }
 
     fun build(context: Context, prefs: Prefs): DomainFilter {
+        val zone = prefs.zone()
         val own = ArrayList<String>(alwaysBlockedDomains({ prefs.socialMode(it) }, prefs.customBlocked()))
         if (prefs.blockBypass) own.addAll(BypassHosts.all)
         val allowed = prefs.allowed()
@@ -43,7 +44,7 @@ object Rules {
             uncloakCname = prefs.uncloakCname,
             blockRebinding = prefs.blockRebinding,
             nightBlock = Blocklist.build(nightBlockedDomains { prefs.socialMode(it) }),
-            nightClock = NightClock(prefs.schedule()),
+            nightClock = NightClock(prefs.schedule(), { zone }),
         )
     }
 }

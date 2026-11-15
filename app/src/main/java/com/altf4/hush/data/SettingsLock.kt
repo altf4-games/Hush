@@ -8,9 +8,8 @@ import java.time.ZonedDateTime
  *
  * While the window is active, settings can only get stricter: the schedule is frozen, apps and
  * quiet-hours sites can be added but not removed, and strict mode can be turned on but not off.
- * Outside the window everything can be changed freely.
- *
- * Limit: this trusts the device clock. Changing the system time is not guarded against.
+ * Outside the window everything can be changed freely until the schedule is committed; after that
+ * the same limits apply at all times. Time comes from [TrustedTime], not the phone's own clock.
  */
 object SettingsLock {
     fun isLocked(schedule: Schedule, now: ZonedDateTime): Boolean = schedule.isActive(now)

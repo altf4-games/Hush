@@ -13,7 +13,7 @@ import java.time.ZonedDateTime
 class NightClock(
     private val schedule: Schedule,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
-    private val now: () -> Long = { System.currentTimeMillis() },
+    private val now: () -> Long = TrustedTime::now,
 ) {
     @Volatile private var active = false
     @Volatile private var validUntil = Long.MIN_VALUE
@@ -26,6 +26,7 @@ class NightClock(
     }
 
     private fun refresh(t: Long) {
+        TrustedTime.syncIfStale()
         val moment = ZonedDateTime.ofInstant(Instant.ofEpochMilli(t), zone())
         val cap = t + RECHECK_MS
         val next = schedule.nextChange(moment)?.toInstant()?.toEpochMilli() ?: cap

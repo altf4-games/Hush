@@ -71,7 +71,7 @@ fun AppsScreen(prefs: Prefs) {
                 )
                 Text(
                     text = if (locked) {
-                        "Locked until the window ends: apps can be added, not removed."
+                        "Locked: apps can be added, not removed."
                     } else {
                         "Select all skips apps you usually need, like messages, maps and the clock. You can still tick them yourself."
                     },

@@ -268,7 +268,7 @@ private fun LazyListScope.socialTab(prefs: Prefs) {
         Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
             Footnote(
                 if (quietNow) {
-                    "Quiet hours are running: these can be blocked more, not less, until they end."
+                    "The schedule is locked: these can be blocked more, not less."
                 } else {
                     "Block a whole service all day, or only during your quiet hours."
                 },

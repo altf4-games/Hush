@@ -20,8 +20,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import com.altf4.hush.data.TrustedTime
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -81,10 +85,24 @@ fun NightScreen(prefs: Prefs) {
     var days by remember { mutableIntStateOf(prefs.nightDays) }
     var strict by remember { mutableStateOf(prefs.strictMode) }
 
+    var committed by remember { mutableStateOf(prefs.nightCommitted) }
+    var confirmLock by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { TrustedTime.syncIfStale() }
+
     val schedule = Schedule(enabled, start, end, days)
-    val status = remember(enabled, start, end, days) { describe(schedule, ZonedDateTime.now()) }
-    // While the window runs, settings can only get stricter (see SettingsLock). Prefs enforces it too.
-    val locked = remember(enabled, start, end, days, strict) { prefs.isLocked() }
+    val status = remember(enabled, start, end, days) { describe(schedule, prefs.now()) }
+    val locked = remember(enabled, start, end, days, strict, committed) { prefs.isLocked() }
+
+    if (confirmLock) {
+        LockScheduleDialog(
+            onConfirm = {
+                confirmLock = false
+                if (prefs.commitNight()) committed = true
+            },
+            onDismiss = { confirmLock = false },
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -97,12 +115,16 @@ fun NightScreen(prefs: Prefs) {
             item {
                 HushCard {
                     Text(
-                        text = "Locked until the window ends",
+                        text = if (committed) "Schedule locked" else "Locked until the window ends",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "The schedule is frozen and apps cannot be removed. You can still add apps or turn on strict mode.",
+                        text = if (committed) {
+                            "The times, days and the night switch are fixed. You can still add apps or turn on strict mode."
+                        } else {
+                            "The schedule is frozen and apps cannot be removed. You can still add apps or turn on strict mode."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
@@ -143,38 +165,33 @@ fun NightScreen(prefs: Prefs) {
         }
 
         item {
-            HushCard {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    TimeColumn("Starts", start, !locked, Modifier.weight(1f)) {
-                        pickTime(context, start) { picked ->
-                            if (prefs.setNightWindow(picked, end)) start = picked
-                        }
-                    }
-                    TimeColumn("Ends", end, !locked, Modifier.weight(1f)) {
-                        pickTime(context, end) { picked ->
-                            if (prefs.setNightWindow(start, picked)) end = picked
-                        }
-                    }
-                }
-                Text(
-                    text = "If it ends earlier than it starts, it runs past midnight.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-                Text(
-                    text = "Starts on",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DAY_LETTERS.forEachIndexed { index, letter ->
-                        val selected = (days and (1 shl index)) != 0
-                        DayToggle(letter, selected, !locked) {
-                            val next = days xor (1 shl index)
-                            if (prefs.setNightDays(next)) days = next
-                        }
+            ScheduleCard(
+                start = start,
+                end = end,
+                days = days,
+                editable = !locked,
+                onStart = { picked -> if (prefs.setNightWindow(picked, end)) start = picked },
+                onEnd = { picked -> if (prefs.setNightWindow(start, picked)) end = picked },
+                onDays = { next -> if (prefs.setNightDays(next)) days = next },
+            )
+        }
+
+        if (!committed) {
+            item {
+                HushCard {
+                    Text(
+                        text = "Lock the schedule",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Set the times once, then lock them. After that they cannot be changed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+                    )
+                    Button(onClick = { confirmLock = true }, enabled = schedule.isUsable) {
+                        Text("Lock schedule")
                     }
                 }
             }
@@ -199,7 +216,7 @@ fun NightScreen(prefs: Prefs) {
                 GroupDivider()
                 SwitchRow(
                     title = "Strict mode",
-                    subtitle = "No emergency pass. Can only be turned off outside quiet hours.",
+                    subtitle = "No emergency pass. Cannot be turned off while the schedule is locked or running.",
                     checked = strict,
                     enabled = !(locked && strict),
                     leading = { IconBadge(Icons.Filled.Lock) },
@@ -215,8 +232,75 @@ fun NightScreen(prefs: Prefs) {
         item {
             Footnote("The service only notices which app opened and cannot read the screen. If its switch is greyed out, open Hush's App info, tap ⋮ and choose Allow restricted settings.")
         }
+        item {
+            Footnote(
+                if (TrustedTime.synced) {
+                    "Time is taken from an online clock, so changing the phone's time has no effect."
+                } else {
+                    "Could not reach an online clock yet. The phone's time is used until it can."
+                },
+            )
+        }
         item { Spacer(Modifier.height(16.dp)) }
     }
+}
+
+@Composable
+internal fun ScheduleCard(
+    start: Int,
+    end: Int,
+    days: Int,
+    editable: Boolean,
+    onStart: (Int) -> Unit,
+    onEnd: (Int) -> Unit,
+    onDays: (Int) -> Unit,
+) {
+    val context = LocalContext.current
+    HushCard {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            TimeColumn("Starts", start, editable, Modifier.weight(1f)) {
+                pickTime(context, start, onStart)
+            }
+            TimeColumn("Ends", end, editable, Modifier.weight(1f)) {
+                pickTime(context, end, onEnd)
+            }
+        }
+        Text(
+            text = "If it ends earlier than it starts, it runs past midnight.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Text(
+            text = "Starts on",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DAY_LETTERS.forEachIndexed { index, letter ->
+                val selected = (days and (1 shl index)) != 0
+                DayToggle(letter, selected, editable) { onDays(days xor (1 shl index)) }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LockScheduleDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Lock this schedule?") },
+        text = {
+            Text(
+                "After this the times, days and the night switch cannot be changed, and apps can only be added. " +
+                    "The time zone is fixed too, and the time comes from an online clock. " +
+                    "Only clearing Hush's data or uninstalling it undoes this.",
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Lock it") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

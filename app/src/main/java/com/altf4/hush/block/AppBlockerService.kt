@@ -62,7 +62,8 @@ class AppBlockerService : AccessibilityService() {
 
     private fun reload() {
         blocked = prefs.blockedApps()
-        clock = NightClock(prefs.schedule())
+        val zone = prefs.zone()
+        clock = NightClock(prefs.schedule(), { zone })
     }
 
     private fun stopListening() {

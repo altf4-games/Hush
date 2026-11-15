@@ -39,5 +39,7 @@ class OnboardingTest {
         assertTrue(met(Onboarding.Step.Welcome))
         assertFalse(Onboarding.isMet(Onboarding.Step.Battery, false, PrivateDnsMode.Off, false, batteryUnrestricted = false))
         assertTrue(Onboarding.isMet(Onboarding.Step.Battery, false, PrivateDnsMode.Off, false, batteryUnrestricted = true))
+        assertFalse(met(Onboarding.Step.Schedule))
+        assertTrue(Onboarding.isMet(Onboarding.Step.Schedule, false, PrivateDnsMode.Off, false, scheduleLocked = true))
     }
 }
