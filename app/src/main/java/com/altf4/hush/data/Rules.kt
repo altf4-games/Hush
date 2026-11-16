@@ -21,17 +21,7 @@ object Rules {
         return domains
     }
 
-    /** Domains of every social preset set to [SocialMode.Night]; blocked only during the quiet window. */
-    fun nightBlockedDomains(modeOf: (String) -> SocialMode): List<String> {
-        val domains = ArrayList<String>()
-        for (site in SocialSites.all) {
-            if (modeOf(site.id) == SocialMode.Night) domains.addAll(site.domains)
-        }
-        return domains
-    }
-
     fun build(context: Context, prefs: Prefs): DomainFilter {
-        val zone = prefs.zone()
         val own = ArrayList<String>(alwaysBlockedDomains({ prefs.socialMode(it) }, prefs.customBlocked()))
         if (prefs.blockBypass) own.addAll(BypassHosts.all)
         val allowed = prefs.allowed()
@@ -43,8 +33,6 @@ object Rules {
             blockRegex = RegexRules.of(prefs.regexBlock()),
             uncloakCname = prefs.uncloakCname,
             blockRebinding = prefs.blockRebinding,
-            nightBlock = Blocklist.build(nightBlockedDomains { prefs.socialMode(it) }),
-            nightClock = NightClock(prefs.schedule(), { zone }),
         )
     }
 }

@@ -33,19 +33,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.altf4.hush.block.EmergencyPass
 import com.altf4.hush.data.Prefs
 import com.altf4.hush.dns.DnsVpnService
 import com.altf4.hush.dns.ListUpdater
 import com.altf4.hush.dns.UpdateScheduler
 import com.altf4.hush.dns.VpnState
-import com.altf4.hush.ui.AppsScreen
 import com.altf4.hush.ui.HushTheme
 import com.altf4.hush.ui.FiltersScreen
 import com.altf4.hush.ui.HomeScreen
 import com.altf4.hush.ui.HushIcons
 import com.altf4.hush.ui.OnboardingScreen
-import com.altf4.hush.ui.NightScreen
 import com.altf4.hush.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
@@ -97,8 +94,6 @@ class MainActivity : ComponentActivity() {
 private enum class HomeTab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
     Filters("Filters", HushIcons.Filter),
-    Night("Night", HushIcons.Moon),
-    Apps("Apps", HushIcons.Grid),
     Settings("Settings", Icons.Filled.Settings),
 }
 
@@ -159,8 +154,6 @@ private fun HushApp(
                                 onProtectionChange = onProtectionChange,
                                 onUpdateNow = onUpdateNow,
                                 onOpenFilters = { selected = HomeTab.Filters.ordinal },
-                                onOpenNight = { selected = HomeTab.Night.ordinal },
-                                onOpenApps = { selected = HomeTab.Apps.ordinal },
                                 onOpenSettings = { selected = HomeTab.Settings.ordinal },
                             )
                             HomeTab.Filters -> FiltersScreen(
@@ -168,8 +161,6 @@ private fun HushApp(
                                 onUpdateNow = onUpdateNow,
                                 onWeeklyChange = onWeeklyChange,
                             )
-                            HomeTab.Night -> NightScreen(prefs)
-                            HomeTab.Apps -> AppsScreen(prefs)
                             HomeTab.Settings -> SettingsScreen(
                                 prefs = prefs,
                                 themeMode = themeMode,
@@ -186,7 +177,6 @@ private fun HushApp(
                                     // Settings were replaced from a file: refresh what the screens and
                                     // services hold, and re-arm the weekly update if it is now on.
                                     themeMode = prefs.themeMode
-                                    if (prefs.strictMode) EmergencyPass.shared.clear()
                                     onWeeklyChange(prefs.weeklyUpdate)
                                     restoreCount++
                                 },

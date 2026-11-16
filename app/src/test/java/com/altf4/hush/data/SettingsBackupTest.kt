@@ -11,14 +11,8 @@ class SettingsBackupTest {
 
     private fun sample(): SettingsSnapshot = SettingsSnapshot(
         theme = ThemeMode.Light,
-        nightEnabled = true,
-        nightStart = 23 * 60,
-        nightEnd = 6 * 60 + 30,
-        nightDays = 0b0011111,
-        strict = true,
-        apps = setOf("com.example.social", "org.example.video_player"),
         social = sites.associateWith { SocialMode.Off } +
-            mapOf(sites[0] to SocialMode.Always, sites[1] to SocialMode.Night),
+            mapOf(sites[0] to SocialMode.Always),
         custom = setOf("example.com", "news.example.org"),
         allowed = setOf("bank.example"),
         regexBlock = setOf("^ads[0-9]+\\."),
@@ -51,7 +45,7 @@ class SettingsBackupTest {
 
     @Test fun emptySetsRoundTrip() {
         val empty = sample().copy(
-            apps = emptySet(), custom = emptySet(), allowed = emptySet(),
+            custom = emptySet(), allowed = emptySet(),
             regexBlock = emptySet(), regexAllow = emptySet(), lists = emptySet(),
             social = sites.associateWith { SocialMode.Off },
         )
@@ -85,7 +79,7 @@ class SettingsBackupTest {
     }
 
     @Test fun incompleteFileIsRefused() {
-        for (key in listOf("theme", "night_enabled", "night_start", "night_end", "night_days", "strict", "weekly")) {
+        for (key in listOf("theme", "uncloak", "rebinding", "bypass", "weekly")) {
             assertTrue("missing $key", refused(edited(key)))
         }
     }
@@ -108,7 +102,7 @@ class SettingsBackupTest {
     }
 
     @Test fun repeatedScalarIsRefused() {
-        assertTrue(refused(withExtra("strict\t0")))
+        assertTrue(refused(withExtra("weekly\t0")))
     }
 
     @Test fun unknownKeyIsRefused() {
@@ -116,18 +110,18 @@ class SettingsBackupTest {
     }
 
     @Test fun badNumbersAndSwitchesAreRefused() {
-        assertTrue(refused(edited("night_start", "night_start\t1440")))
-        assertTrue(refused(edited("night_start", "night_start\t-1")))
-        assertTrue(refused(edited("night_end", "night_end\tabc")))
-        assertTrue(refused(edited("night_days", "night_days\t128")))
-        assertTrue(refused(edited("strict", "strict\t2")))
+        assertTrue(refused(edited("weekly", "weekly\t2")))
+        assertTrue(refused(edited("bypass", "bypass\tyes")))
         assertTrue(refused(edited("theme", "theme\tneon")))
     }
 
-    @Test fun badAppNamesAreRefused() {
-        for (bad in listOf("notapackage", "../etc/passwd", "com.example app", "1com.example", "a..b")) {
-            assertTrue("app $bad", refused(withExtra("app\t$bad")))
-        }
+    @Test fun filesFromVersionsWithQuietHoursStillLoad() {
+        val old = edited("social", "social\t${sites[0]}:always", "social\t${sites[1]}:night") +
+            "\nnight_enabled\t1\nnight_start\t1380\nnight_end\t390\nnight_days\t31\nstrict\t1\n" +
+            "app\tcom.example.social\napp\tcom.example.video\n"
+        val snapshot = (decoded(old) as BackupResult.Ok).snapshot
+        assertEquals(SocialMode.Always, snapshot.social[sites[0]])
+        assertEquals(SocialMode.Off, snapshot.social[sites[1]])
     }
 
     @Test fun sitesMustAlreadyBeCleanDomains() {
@@ -153,15 +147,13 @@ class SettingsBackupTest {
     }
 
     @Test fun valuesWithTabsOrNoValueAreRefused() {
-        assertTrue(refused(withExtra("app\tcom.example\textra")))
-        assertTrue(refused(withExtra("app\t")))
+        assertTrue(refused(withExtra("custom\texample.com\textra")))
+        assertTrue(refused(withExtra("custom\t")))
         assertTrue(refused(withExtra("justtext")))
         assertTrue(refused(withExtra("\tvalue")))
     }
 
     @Test fun tooManyEntriesAreRefused() {
-        val apps = (0..SettingsBackup.MAX_APPS).joinToString("") { "app\tcom.example.a$it\n" }
-        assertTrue(refused(SettingsBackup.encode(sample().copy(apps = emptySet())) + apps))
         val patterns = (0..com.altf4.hush.dns.SafeRegex.MAX_RULES).joinToString("") { "regex_block\t^a$it\\.\n" }
         assertTrue(refused(SettingsBackup.encode(sample().copy(regexBlock = emptySet())) + patterns))
     }
@@ -176,9 +168,8 @@ class SettingsBackupTest {
         val text = SettingsBackup.encode(sample())
         val keys = text.lines().drop(1).filter { it.isNotEmpty() }.map { it.substringBefore('\t') }.toSet()
         val allowedKeys = setOf(
-            "theme", "night_enabled", "night_start", "night_end", "night_days", "strict", "uncloak",
-            "rebinding", "bypass", "weekly", "dns", "social", "list", "app", "custom", "allowed",
-            "regex_block", "regex_allow",
+            "theme", "uncloak", "rebinding", "bypass", "weekly", "dns", "social", "list", "custom",
+            "allowed", "regex_block", "regex_allow",
         )
         assertTrue(allowedKeys.containsAll(keys))
     }

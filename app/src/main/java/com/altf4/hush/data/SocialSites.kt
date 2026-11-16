@@ -1,10 +1,9 @@
 package com.altf4.hush.data
 
-/** How a preset is applied. Night-only presets are evaluated against the quiet window. */
+/** Whether a preset is blocked. */
 enum class SocialMode(val key: String) {
     Off("off"),
-    Always("always"),
-    Night("night");
+    Always("always");
 
     companion object {
         fun fromKey(key: String?): SocialMode = entries.firstOrNull { it.key == key } ?: Off

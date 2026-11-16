@@ -61,7 +61,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         Text("Version $version", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(
-                        "Blocks ads, trackers and sites you choose on your whole phone, and closes distracting apps during quiet hours. It all runs on this device.",
+                        "Blocks ads, trackers and sites you choose on your whole phone. It all runs on this device.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
@@ -90,12 +90,6 @@ fun AboutScreen(onBack: () -> Unit) {
                     HushIcons.Dns,
                     "Everything else is encrypted",
                     "Allowed lookups go to your chosen DNS server over TLS, never in the clear.",
-                )
-                GroupDivider()
-                Fact(
-                    HushIcons.Moon,
-                    "Night lock",
-                    "An accessibility service notices which app opened and closes the ones you chose during quiet hours. It cannot read the screen.",
                 )
             }
         }

@@ -28,18 +28,14 @@ class OnboardingTest {
     }
 
     @Test fun stepsAreMetFromTheFacts() {
-        fun met(step: Onboarding.Step, vpn: Boolean = false, dns: PrivateDnsMode = PrivateDnsMode.Off, a11y: Boolean = false) =
-            Onboarding.isMet(step, vpn, dns, a11y)
+        fun met(step: Onboarding.Step, vpn: Boolean = false, dns: PrivateDnsMode = PrivateDnsMode.Off) =
+            Onboarding.isMet(step, vpn, dns)
         assertFalse(met(Onboarding.Step.Protection))
         assertTrue(met(Onboarding.Step.Protection, vpn = true))
         assertFalse(met(Onboarding.Step.PrivateDns, dns = PrivateDnsMode.Strict))
         assertTrue(met(Onboarding.Step.PrivateDns, dns = PrivateDnsMode.Automatic))
-        assertFalse(met(Onboarding.Step.NightLock))
-        assertTrue(met(Onboarding.Step.NightLock, a11y = true))
         assertTrue(met(Onboarding.Step.Welcome))
-        assertFalse(Onboarding.isMet(Onboarding.Step.Battery, false, PrivateDnsMode.Off, false, batteryUnrestricted = false))
-        assertTrue(Onboarding.isMet(Onboarding.Step.Battery, false, PrivateDnsMode.Off, false, batteryUnrestricted = true))
-        assertFalse(met(Onboarding.Step.Schedule))
-        assertTrue(Onboarding.isMet(Onboarding.Step.Schedule, false, PrivateDnsMode.Off, false, scheduleLocked = true))
+        assertFalse(Onboarding.isMet(Onboarding.Step.Battery, false, PrivateDnsMode.Off, batteryUnrestricted = false))
+        assertTrue(Onboarding.isMet(Onboarding.Step.Battery, false, PrivateDnsMode.Off, batteryUnrestricted = true))
     }
 }

@@ -1,13 +1,12 @@
 # Hush
 
-Blocks ads, trackers and sites you choose across your whole Android phone, and closes distracting apps during quiet hours. Everything runs on the device: no account, no analytics, no servers of its own.
+Blocks ads, trackers and sites you choose across your whole Android phone. Everything runs on the device: no account, no analytics, no servers of its own.
 
 ## Features
 
 - **Site blocking.** A local VPN carries only DNS lookups. Names on your lists get an empty answer, so ads and trackers never load in any app or browser. All other traffic goes straight out as usual.
 - **Encrypted DNS.** Allowed lookups go to Google, Cloudflare or Quad9 over TLS (Google by default), never in the clear.
-- **Filter lists.** Pick from well-known lists; they download over HTTPS on first launch and refresh weekly. Add your own sites, allow-rules, patterns and social-media presets.
-- **Night lock.** During quiet hours, chosen apps are closed and night-only sites are blocked. Settings can only get stricter while it runs.
+- **Filter lists.** Pick from well-known lists; they download over HTTPS on first launch and refresh weekly. Add your own sites, allow-rules and patterns, or block whole social services with one switch.
 - **Stats.** Blocked and total lookups today, this week and all time. Counts only; no domain names are ever stored.
 - **Widget and quick settings tile.** See today's blocked count and turn blocking on or off from the home screen or the status-bar pull-down.
 - **Backup.** Save and load your settings as a plain text file.

@@ -36,10 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.altf4.hush.block.BlockerState
 import com.altf4.hush.data.Prefs
-import com.altf4.hush.data.SetupChecklist
-import com.altf4.hush.data.SetupItem
 import com.altf4.hush.dns.ListCatalog
 import com.altf4.hush.dns.Stats
 import com.altf4.hush.dns.UpdateStatus
@@ -55,8 +52,6 @@ fun HomeScreen(
     onProtectionChange: (Boolean) -> Unit,
     onUpdateNow: () -> Unit,
     onOpenFilters: () -> Unit,
-    onOpenNight: () -> Unit,
-    onOpenApps: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -70,7 +65,6 @@ fun HomeScreen(
     val listCount = remember(UpdateStatus.running) { ListCatalog.all.count { prefs.listSha(it.id) != null } }
     val provider = remember { prefs.dnsProvider }
     val privateDns = remember(resumed) { readPrivateDns(context) }
-    val nightOn = remember { prefs.nightEnabled }
 
     val weekLetters = remember {
         val today = LocalDate.now()
@@ -78,13 +72,6 @@ fun HomeScreen(
     }
     val todayRate = if (stats.todayTotal > 0) stats.todayBlocked * 100.0 / stats.todayTotal else 0.0
     val weekBlocked = stats.weekBlocked.sum()
-
-    val checklist = SetupChecklist.items(
-        protectionOn,
-        BlockerState.running,
-        remember { prefs.blockedApps().size },
-        nightOn,
-    )
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -229,14 +216,6 @@ fun HomeScreen(
                     trailing = { Chevron() },
                     onClick = onOpenSettings,
                 )
-                GroupDivider()
-                GroupRow(
-                    title = "Night lock",
-                    subtitle = if (nightOn) "On · quiet hours scheduled" else "Off",
-                    leading = { IconBadge(HushIcons.Moon) },
-                    trailing = { Chevron() },
-                    onClick = onOpenNight,
-                )
             }
         }
 
@@ -247,20 +226,6 @@ fun HomeScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp),
-                )
-            }
-        }
-
-        if (!SetupChecklist.isComplete(checklist)) {
-            item {
-                SetupCard(
-                    items = checklist,
-                    actions = mapOf(
-                        SetupItem.Id.Protection to ("Turn on" to { onProtectionChange(true) }),
-                        SetupItem.Id.Accessibility to ("Open" to { openAccessibilitySettings(context) }),
-                        SetupItem.Id.Apps to ("Choose" to onOpenApps),
-                        SetupItem.Id.Night to ("Set up" to onOpenNight),
-                    ),
                 )
             }
         }

@@ -4,10 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.altf4.hush.dns.DnsProvider
 import com.altf4.hush.dns.ListCatalog
-import java.time.DateTimeException
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
 
 /**
  * Settings store. Services re-read settings only when [version] changes, so every change that
@@ -22,75 +18,6 @@ class Prefs(context: Context) {
     var themeMode: ThemeMode
         get() = ThemeMode.fromKey(sp.getString(K_THEME, null))
         set(value) = edit(bump = false) { putString(K_THEME, value.key) }
-
-    /** Quiet window as minutes after midnight. */
-    val nightStartMinutes: Int get() = sp.getInt(K_NIGHT_START, DEFAULT_NIGHT_START)
-    val nightEndMinutes: Int get() = sp.getInt(K_NIGHT_END, DEFAULT_NIGHT_END)
-
-    val nightCommitted: Boolean get() = sp.getBoolean(K_NIGHT_COMMITTED, false)
-
-    fun zone(): ZoneId {
-        if (!nightCommitted) return ZoneId.systemDefault()
-        val id = sp.getString(K_NIGHT_ZONE, null) ?: return ZoneId.systemDefault()
-        return try { ZoneId.of(id) } catch (e: DateTimeException) { ZoneId.systemDefault() }
-    }
-
-    fun now(): ZonedDateTime = ZonedDateTime.ofInstant(Instant.ofEpochMilli(TrustedTime.now()), zone())
-
-    fun commitNight(): Boolean {
-        if (nightCommitted) return true
-        if (!schedule().isUsable) return false
-        edit(bump = true) {
-            putBoolean(K_NIGHT_COMMITTED, true)
-            putString(K_NIGHT_ZONE, ZoneId.systemDefault().id)
-        }
-        return true
-    }
-
-    fun isWindowActive(at: ZonedDateTime = now()): Boolean = SettingsLock.isLocked(schedule(), at)
-
-    /**
-     * True once the schedule has been committed, and while the quiet window is running. Setters
-     * below that return a Boolean refuse the change (and return false) when [SettingsLock] says it
-     * is not allowed.
-     */
-    fun isLocked(at: ZonedDateTime = now()): Boolean = nightCommitted || isWindowActive(at)
-
-    fun setNightWindow(startMinutes: Int, endMinutes: Int): Boolean {
-        if (!SettingsLock.allowsScheduleChange(isLocked())) return false
-        edit(bump = true) {
-            putInt(K_NIGHT_START, startMinutes)
-            putInt(K_NIGHT_END, endMinutes)
-        }
-        return true
-    }
-
-    /** Master switch for the quiet window (app closing and quiet-hours-only sites). Off by default. */
-    val nightEnabled: Boolean get() = sp.getBoolean(K_NIGHT_ON, false)
-
-    fun setNightEnabled(on: Boolean): Boolean {
-        if (!SettingsLock.allowsNightSwitch(isLocked(), on)) return false
-        edit(bump = true) { putBoolean(K_NIGHT_ON, on) }
-        return true
-    }
-
-    /** Days the window starts on, as a bit mask (bit 0 = Monday ... bit 6 = Sunday). Every day by default. */
-    val nightDays: Int get() = sp.getInt(K_NIGHT_DAYS, Schedule.ALL_DAYS)
-
-    fun setNightDays(mask: Int): Boolean {
-        if (!SettingsLock.allowsScheduleChange(isLocked())) return false
-        edit(bump = true) { putInt(K_NIGHT_DAYS, mask and Schedule.ALL_DAYS) }
-        return true
-    }
-
-    /** Strict mode: no emergency pass. Off by default; can only be turned off outside quiet hours. */
-    val strictMode: Boolean get() = sp.getBoolean(K_STRICT, false)
-
-    fun setStrictMode(on: Boolean): Boolean {
-        if (!SettingsLock.allowsStrictChange(isLocked(), on)) return false
-        edit(bump = false) { putBoolean(K_STRICT, on) }
-        return true
-    }
 
     /**
      * Whether protection was on when the phone last ran, so it can be restarted after a reboot.
@@ -115,24 +42,6 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(K_ONBOARDED, false)
         set(value) = edit(bump = false) { putBoolean(K_ONBOARDED, value) }
 
-    fun schedule(): Schedule = Schedule(nightEnabled, nightStartMinutes, nightEndMinutes, nightDays)
-
-    /** Package names of the apps closed during quiet hours. A setting the person chose, not usage data. */
-    fun blockedApps(): Set<String> = stringSet(K_APPS)
-
-    fun setAppBlocked(pkg: String, blocked: Boolean): Boolean {
-        val next = HashSet(blockedApps())
-        if (blocked) next.add(pkg) else next.remove(pkg)
-        return setBlockedApps(next)
-    }
-
-    /** While locked, only changes that keep every chosen app are accepted. */
-    fun setBlockedApps(packages: Set<String>): Boolean {
-        if (!SettingsLock.allowsAppChange(isLocked(), blockedApps(), packages)) return false
-        edit(bump = true) { putStringSet(K_APPS, HashSet(packages)) }
-        return true
-    }
-
     fun enabledLists(): Set<String> {
         val stored = sp.getStringSet(K_LISTS, null) ?: return ListCatalog.defaultEnabledIds
         return HashSet(stored) // copy: the set returned by SharedPreferences must not be mutated
@@ -147,11 +56,8 @@ class Prefs(context: Context) {
     fun socialMode(id: String): SocialMode =
         SocialMode.fromKey(sp.getString(K_SOCIAL_PREFIX + id, null))
 
-    /** While locked, a preset can only move towards "blocked more". Returns false if refused. */
-    fun setSocialMode(id: String, mode: SocialMode): Boolean {
-        if (!SettingsLock.allowsSocialChange(isLocked(), socialMode(id), mode)) return false
+    fun setSocialMode(id: String, mode: SocialMode) {
         edit(bump = true) { putString(K_SOCIAL_PREFIX + id, mode.key) }
-        return true
     }
 
     /** Sites the user always blocks, as clean domains (see [DomainInput]). */
@@ -236,12 +142,6 @@ class Prefs(context: Context) {
     /** Everything that goes into a backup file. */
     fun snapshot(): SettingsSnapshot = SettingsSnapshot(
         theme = themeMode,
-        nightEnabled = nightEnabled,
-        nightStart = nightStartMinutes,
-        nightEnd = nightEndMinutes,
-        nightDays = nightDays,
-        strict = strictMode,
-        apps = blockedApps(),
         social = SocialSites.all.associate { it.id to socialMode(it.id) },
         custom = customBlocked(),
         allowed = allowed(),
@@ -256,25 +156,13 @@ class Prefs(context: Context) {
     )
 
     /**
-     * Replaces every setting in one step (one version bump). Refused while the quiet window is
-     * running, because a backup could otherwise be used to undo the lock. Once the schedule is
-     * committed, the night schedule, strict mode, chosen apps and social presets are kept as they
-     * are. The snapshot must come from [SettingsBackup.decode], which has already checked every value.
+     * Replaces every setting in one step (one version bump). The snapshot must come from
+     * [SettingsBackup.decode], which has already checked every value.
      */
-    fun restore(s: SettingsSnapshot): Boolean {
-        if (isWindowActive()) return false
-        val keepNight = nightCommitted
+    fun restore(s: SettingsSnapshot) {
         edit(bump = true) {
             putString(K_THEME, s.theme.key)
-            if (!keepNight) {
-                putBoolean(K_NIGHT_ON, s.nightEnabled)
-                putInt(K_NIGHT_START, s.nightStart)
-                putInt(K_NIGHT_END, s.nightEnd)
-                putInt(K_NIGHT_DAYS, s.nightDays and Schedule.ALL_DAYS)
-                putBoolean(K_STRICT, s.strict)
-                putStringSet(K_APPS, HashSet(s.apps))
-                for ((id, mode) in s.social) putString(K_SOCIAL_PREFIX + id, mode.key)
-            }
+            for ((id, mode) in s.social) putString(K_SOCIAL_PREFIX + id, mode.key)
             putStringSet(K_CUSTOM, HashSet(s.custom))
             putStringSet(K_ALLOWED, HashSet(s.allowed))
             putStringSet(K_REGEX_BLOCK, HashSet(s.regexBlock))
@@ -286,7 +174,6 @@ class Prefs(context: Context) {
             putBoolean(K_WEEKLY, s.weekly)
             putString(K_DNS, s.dns.key)
         }
-        return true
     }
 
     private fun stringSet(key: String): Set<String> =
@@ -321,14 +208,6 @@ class Prefs(context: Context) {
         const val FILE = "hush_prefs"
         const val K_VERSION = "version"
         const val K_THEME = "theme"
-        const val K_NIGHT_START = "night_start"
-        const val K_NIGHT_END = "night_end"
-        const val K_NIGHT_ON = "night_enabled"
-        const val K_NIGHT_DAYS = "night_days"
-        const val K_NIGHT_COMMITTED = "night_committed"
-        const val K_NIGHT_ZONE = "night_zone"
-        const val K_APPS = "blocked_apps"
-        const val K_STRICT = "strict_mode"
         const val K_PROTECTION = "protection_wanted"
         const val K_STATS = "stats"
         const val K_DNS = "dns_provider"
@@ -349,7 +228,5 @@ class Prefs(context: Context) {
         const val K_LISTS_COUNT = "lists_count"
         const val K_LISTS_INCOMPLETE = "lists_incomplete"
         const val K_SHA_PREFIX = "sha_"
-        const val DEFAULT_NIGHT_START = 23 * 60
-        const val DEFAULT_NIGHT_END = 6 * 60
     }
 }

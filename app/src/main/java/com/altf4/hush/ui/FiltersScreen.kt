@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -29,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import com.altf4.hush.data.DomainInput
 import com.altf4.hush.data.Prefs
 import com.altf4.hush.data.SocialMode
-import com.altf4.hush.data.SocialSite
 import com.altf4.hush.data.SocialSites
 import com.altf4.hush.dns.BlockListSource
 import com.altf4.hush.dns.ListCatalog
@@ -259,68 +257,30 @@ private fun validatePattern(input: String, existingCount: Int): EditorResult {
 
 private fun LazyListScope.socialTab(prefs: Prefs) {
     item(key = "social-body") {
-        val quietNow = remember { prefs.isLocked() }
         val modes = remember {
             mutableStateMapOf<String, SocialMode>().apply {
                 SocialSites.all.forEach { put(it.id, prefs.socialMode(it.id)) }
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
-            Footnote(
-                if (quietNow) {
-                    "The schedule is locked: these can be blocked more, not less."
-                } else {
-                    "Block a whole service all day, or only during your quiet hours."
-                },
-            )
+            Footnote("Block a whole service on this phone, with all its subdomains.")
             ListGroup {
                 SocialSites.all.forEachIndexed { index, site ->
                     if (index > 0) GroupDivider()
-                    SocialRow(
-                        site = site,
-                        mode = modes[site.id] ?: SocialMode.Off,
-                        onModeChange = { mode ->
-                            // Refused while the quiet window runs if it would block less.
-                            if (prefs.setSocialMode(site.id, mode)) modes[site.id] = mode
+                    val mode = modes[site.id] ?: SocialMode.Off
+                    val next = if (mode == SocialMode.Off) SocialMode.Always else SocialMode.Off
+                    GroupRow(
+                        title = site.name,
+                        subtitle = if (mode == SocialMode.Off) "Not blocked" else "Blocked",
+                        onClick = {
+                            prefs.setSocialMode(site.id, next)
+                            modes[site.id] = next
+                        },
+                        trailing = {
+                            Switch(checked = mode != SocialMode.Off, onCheckedChange = null)
                         },
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SocialRow(site: SocialSite, mode: SocialMode, onModeChange: (SocialMode) -> Unit) {
-    val summary = when (mode) {
-        SocialMode.Off -> "Not blocked"
-        SocialMode.Always -> "Blocked all day"
-        SocialMode.Night -> "Blocked during quiet hours"
-    }
-    Column {
-        GroupRow(
-            title = site.name,
-            subtitle = summary,
-            onClick = { onModeChange(if (mode == SocialMode.Off) SocialMode.Always else SocialMode.Off) },
-            trailing = {
-                Switch(checked = mode != SocialMode.Off, onCheckedChange = null)
-            },
-        )
-        if (mode != SocialMode.Off) {
-            Row(
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilterChip(
-                    selected = mode == SocialMode.Always,
-                    onClick = { onModeChange(SocialMode.Always) },
-                    label = { Text("All day") },
-                )
-                FilterChip(
-                    selected = mode == SocialMode.Night,
-                    onClick = { onModeChange(SocialMode.Night) },
-                    label = { Text("Quiet hours only") },
-                )
             }
         }
     }

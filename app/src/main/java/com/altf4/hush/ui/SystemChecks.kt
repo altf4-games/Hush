@@ -3,7 +3,6 @@ package com.altf4.hush.ui
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.runtime.Composable
@@ -49,19 +48,8 @@ fun openSettings(context: Context, vararg intents: Intent): Boolean {
 fun openNetworkSettings(context: Context) =
     openSettings(context, Intent(Settings.ACTION_WIRELESS_SETTINGS), Intent(Settings.ACTION_SETTINGS))
 
-fun openAccessibilitySettings(context: Context) =
-    openSettings(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), Intent(Settings.ACTION_SETTINGS))
-
 fun openBatterySettings(context: Context) =
     openSettings(context, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS), Intent(Settings.ACTION_SETTINGS))
-
-/** Hush's own App info page, where "Allow restricted settings" lives on Android 13+. */
-fun openAppInfo(context: Context) =
-    openSettings(
-        context,
-        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")),
-        Intent(Settings.ACTION_SETTINGS),
-    )
 
 /**
  * A number that goes up every time the screen resumes, e.g. on return from system settings. Use

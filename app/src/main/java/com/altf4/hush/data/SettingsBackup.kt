@@ -7,12 +7,6 @@ import com.altf4.hush.dns.SafeRegex
 /** Every setting that goes into a backup file. Nothing else (no counters, no list contents). */
 data class SettingsSnapshot(
     val theme: ThemeMode,
-    val nightEnabled: Boolean,
-    val nightStart: Int,
-    val nightEnd: Int,
-    val nightDays: Int,
-    val strict: Boolean,
-    val apps: Set<String>,
     val social: Map<String, SocialMode>,
     val custom: Set<String>,
     val allowed: Set<String>,
@@ -41,21 +35,16 @@ sealed class BackupResult {
  * settings repeat their key. Values may not contain tabs or line breaks.
  *
  * `dns` is optional so files saved before the DNS server choice existed still load; when it is
- * missing the default server is used.
+ * missing the default server is used. Files from versions that had quiet hours still load: their
+ * night, strict and app lines are skipped, and a site set to "night" loads as not blocked.
  */
 object SettingsBackup {
     const val HEADER = "hush-settings 1"
     const val MAX_CHARS = 512 * 1024
-    const val MAX_APPS = 2000
     const val MAX_DOMAINS = 5000
 
-    private val PACKAGE = Regex("""[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+""")
-    private const val MAX_PACKAGE_LENGTH = 255
-
-    private val SCALARS = listOf(
-        "theme", "night_enabled", "night_start", "night_end", "night_days", "strict",
-        "uncloak", "rebinding", "bypass", "weekly",
-    )
+    private val SCALARS = listOf("theme", "uncloak", "rebinding", "bypass", "weekly")
+    private val LEGACY = setOf("night_enabled", "night_start", "night_end", "night_days", "strict", "app")
     private const val DNS_KEY = "dns"
 
     fun encode(s: SettingsSnapshot): String {
@@ -67,11 +56,6 @@ object SettingsBackup {
         fun flag(key: String, on: Boolean) = line(key, if (on) "1" else "0")
 
         line("theme", s.theme.key)
-        flag("night_enabled", s.nightEnabled)
-        line("night_start", s.nightStart.toString())
-        line("night_end", s.nightEnd.toString())
-        line("night_days", s.nightDays.toString())
-        flag("strict", s.strict)
         flag("uncloak", s.uncloak)
         flag("rebinding", s.rebinding)
         flag("bypass", s.bypass)
@@ -79,7 +63,6 @@ object SettingsBackup {
         line(DNS_KEY, s.dns.key)
         for (id in s.social.keys.sorted()) line("social", "$id:${s.social.getValue(id).key}")
         for (v in s.lists.sorted()) line("list", v)
-        for (v in s.apps.sorted()) line("app", v)
         for (v in s.custom.sorted()) line("custom", v)
         for (v in s.allowed.sorted()) line("allowed", v)
         for (v in s.regexBlock.sorted()) line("regex_block", v)
@@ -96,7 +79,6 @@ object SettingsBackup {
         var dnsKey: String? = null
         val social = LinkedHashMap<String, SocialMode>()
         val lists = LinkedHashSet<String>()
-        val apps = LinkedHashSet<String>()
         val custom = LinkedHashSet<String>()
         val allowed = LinkedHashSet<String>()
         val regexBlock = LinkedHashSet<String>()
@@ -109,6 +91,7 @@ object SettingsBackup {
             val value = raw.substring(tab + 1)
             if (value.isEmpty() || value.indexOf('\t') >= 0) return refuse("A value could not be read")
             when (key) {
+                in LEGACY -> Unit
                 in SCALARS -> if (scalars.put(key, value) != null) return refuse("A setting appears twice")
                 DNS_KEY -> {
                     if (dnsKey != null) return refuse("A setting appears twice")
@@ -118,18 +101,14 @@ object SettingsBackup {
                     val colon = value.indexOf(':')
                     if (colon <= 0) return refuse("A site choice could not be read")
                     val id = value.substring(0, colon)
-                    val mode = SocialMode.entries.firstOrNull { it.key == value.substring(colon + 1) }
+                    val modeKey = value.substring(colon + 1)
+                    val mode = if (modeKey == "night") SocialMode.Off else SocialMode.entries.firstOrNull { it.key == modeKey }
                     if (SocialSites.all.none { it.id == id } || mode == null) return refuse("An unknown site choice")
                     if (social.put(id, mode) != null) return refuse("A site choice appears twice")
                 }
                 "list" -> {
                     if (ListCatalog.all.none { it.id == value }) return refuse("An unknown blocklist")
                     lists.add(value)
-                }
-                "app" -> {
-                    if (value.length > MAX_PACKAGE_LENGTH || !PACKAGE.matches(value)) return refuse("An app name is not valid")
-                    if (apps.size >= MAX_APPS) return refuse("Too many apps")
-                    apps.add(value)
                 }
                 "custom", "allowed" -> {
                     if (DomainInput.parse(value) != value) return refuse("A site is not a clean domain")
@@ -150,28 +129,16 @@ object SettingsBackup {
 
         val theme = ThemeMode.entries.firstOrNull { it.key == scalars["theme"] }
             ?: return refuse("An unknown theme")
-        val start = scalars.getValue("night_start").toIntOrNull()
-        val end = scalars.getValue("night_end").toIntOrNull()
-        val days = scalars.getValue("night_days").toIntOrNull()
-        if (start == null || end == null || start !in 0 until Schedule.MINUTES_PER_DAY ||
-            end !in 0 until Schedule.MINUTES_PER_DAY
-        ) {
-            return refuse("The night window is not valid")
-        }
-        if (days == null || days !in 0..Schedule.ALL_DAYS) return refuse("The night days are not valid")
-
         fun flag(key: String): Boolean? = when (scalars.getValue(key)) {
             "1" -> true
             "0" -> false
             else -> null
         }
-        val night = flag("night_enabled")
-        val strict = flag("strict")
         val uncloak = flag("uncloak")
         val rebinding = flag("rebinding")
         val bypass = flag("bypass")
         val weekly = flag("weekly")
-        if (night == null || strict == null || uncloak == null || rebinding == null || bypass == null || weekly == null) {
+        if (uncloak == null || rebinding == null || bypass == null || weekly == null) {
             return refuse("A switch has an unexpected value")
         }
 
@@ -187,12 +154,6 @@ object SettingsBackup {
         return BackupResult.Ok(
             SettingsSnapshot(
                 theme = theme,
-                nightEnabled = night,
-                nightStart = start,
-                nightEnd = end,
-                nightDays = days,
-                strict = strict,
-                apps = apps,
                 social = allSocial,
                 custom = custom,
                 allowed = allowed,

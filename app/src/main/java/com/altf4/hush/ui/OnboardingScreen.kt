@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.altf4.hush.block.BlockerState
 import com.altf4.hush.data.Onboarding
 import com.altf4.hush.data.Onboarding.Step
 import com.altf4.hush.data.Prefs
@@ -68,34 +67,13 @@ fun OnboardingScreen(
     val resumed = rememberResumeCount()
     val privateDns = remember(resumed) { readPrivateDns(context) }
     val battery = remember(resumed) { isBatteryUnrestricted(context) }
-    val accessibilityOn = BlockerState.running
     var provider by remember { mutableStateOf(prefs.dnsProvider) }
-    var openedAccessibility by rememberSaveable { mutableStateOf(false) }
-    var committed by remember { mutableStateOf(prefs.nightCommitted) }
-    var confirmLock by remember { mutableStateOf(false) }
-    var start by remember { mutableStateOf(prefs.nightStartMinutes) }
-    var end by remember { mutableStateOf(prefs.nightEndMinutes) }
-    var days by remember { mutableStateOf(prefs.nightDays) }
 
     fun next() {
         if (index < Onboarding.steps.lastIndex) index++ else onFinish()
     }
 
     BackHandler(enabled = index > 0) { index-- }
-
-    if (confirmLock) {
-        LockScheduleDialog(
-            onConfirm = {
-                confirmLock = false
-                prefs.setNightEnabled(true)
-                if (prefs.commitNight()) {
-                    committed = true
-                    next()
-                }
-            },
-            onDismiss = { confirmLock = false },
-        )
-    }
 
     Column(
         Modifier
@@ -137,18 +115,8 @@ fun OnboardingScreen(
                         prefs.dnsProvider = it
                     }
                     Step.PrivateDns -> PrivateDnsPage(privateDns, onOpen = { openNetworkSettings(context) })
-                    Step.NightLock -> NightLockPage(accessibilityOn, openedAccessibility, onOpenAppInfo = { openAppInfo(context) })
-                    Step.Schedule -> SchedulePage(
-                        start = start,
-                        end = end,
-                        days = days,
-                        committed = committed,
-                        onStart = { if (prefs.setNightWindow(it, end)) start = it },
-                        onEnd = { if (prefs.setNightWindow(start, it)) end = it },
-                        onDays = { if (prefs.setNightDays(it)) days = it },
-                    )
                     Step.Battery -> BatteryPage(battery)
-                    Step.Done -> DonePage(prefs, protectionOn, provider, privateDns, accessibilityOn, committed)
+                    Step.Done -> DonePage(prefs, protectionOn, provider, privateDns)
                 }
             }
         }
@@ -165,21 +133,6 @@ fun OnboardingScreen(
                 }
                 Step.Dns -> Primary("Continue") { next() }
                 Step.PrivateDns -> Primary(if (privateDns.bypassesHush) "I'll do it later" else "Continue") { next() }
-                Step.NightLock -> if (accessibilityOn) {
-                    Primary("Continue") { next() }
-                } else {
-                    Primary("Agree and open settings") {
-                        openedAccessibility = true
-                        openAccessibilitySettings(context)
-                    }
-                    Secondary("Not now") { next() }
-                }
-                Step.Schedule -> if (committed) {
-                    Primary("Continue") { next() }
-                } else {
-                    Primary("Lock this schedule") { confirmLock = true }
-                    Secondary("Not now") { next() }
-                }
                 Step.Battery -> if (battery) {
                     Primary("Continue") { next() }
                 } else {
@@ -248,7 +201,7 @@ private fun WelcomePage() {
     Text("A quieter phone", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.onSurface)
     Spacer(Modifier.height(12.dp))
     Text(
-        "Hush blocks ads, trackers and distracting sites in every app, and can close chosen apps at night. Setup takes about a minute.",
+        "Hush blocks ads, trackers and distracting sites in every app. Setup takes about a minute.",
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -257,8 +210,6 @@ private fun WelcomePage() {
         GroupRow("Blocks ads and trackers", "In apps and browsers, using trusted lists.", leading = { IconBadge(HushIcons.Filter, size = 36) })
         GroupDivider()
         GroupRow("Keeps lookups private", "Encrypted DNS, and no browsing history kept.", leading = { IconBadge(HushIcons.Dns, size = 36) })
-        GroupDivider()
-        GroupRow("Quiet hours", "Closes the apps you pick at night.", leading = { IconBadge(HushIcons.Moon, size = 36) })
     }
 }
 
@@ -321,64 +272,6 @@ private fun PrivateDnsPage(mode: PrivateDnsMode, onOpen: () -> Unit) {
         )
     }
 }
-
-@Composable
-private fun NightLockPage(on: Boolean, opened: Boolean, onOpenAppInfo: () -> Unit) {
-    PageHeader(
-        HushIcons.Moon,
-        "Night lock",
-        "Close the apps you choose during quiet hours. This uses an Android accessibility service, so please read what it does before you agree.",
-        optional = true,
-    )
-    if (on) {
-        CheckLine(true, "Accessibility service is on", "Pick apps and a schedule in the Night tab.")
-        return
-    }
-    // Prominent disclosure, shown in the app before the person turns the service on.
-    ListGroup {
-        GroupRow("What it sees", "Only which app has just opened. It cannot read the screen, what you type, or passwords.", leading = { IconBadge(HushIcons.Accessibility, size = 36) })
-        GroupDivider()
-        GroupRow("What it does", "If that app is one you chose and quiet hours are running, it closes it.", leading = { IconBadge(HushIcons.Moon, size = 36) })
-        GroupDivider()
-        GroupRow("What it keeps", "Nothing. No app history is stored or sent anywhere.", leading = { IconBadge(HushIcons.ShieldCheck, size = 36) })
-    }
-    if (opened && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Spacer(Modifier.height(CardGap))
-        HushCard {
-            Text("Switch greyed out?", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            Text(
-                "For apps installed outside the Play Store, Android hides this setting. Tap the greyed-out switch once, then open Hush's App info, tap ⋮ and choose Allow restricted settings. Come back and turn it on.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-            )
-            OutlinedButton(onClick = onOpenAppInfo) { Text("Open App info") }
-        }
-    }
-}
-
-@Composable
-private fun SchedulePage(
-    start: Int,
-    end: Int,
-    days: Int,
-    committed: Boolean,
-    onStart: (Int) -> Unit,
-    onEnd: (Int) -> Unit,
-    onDays: (Int) -> Unit,
-) {
-    PageHeader(
-        HushIcons.Moon,
-        "Quiet hours",
-        "Choose when the apps you pick should close. This is the only time you can set it: once locked, the times cannot be changed.",
-        optional = true,
-    )
-    if (committed) {
-        CheckLine(true, "Schedule locked", "Pick the apps to close in the Night tab.")
-    }
-    ScheduleCard(start, end, days, editable = !committed, onStart = onStart, onEnd = onEnd, onDays = onDays)
-}
-
 @Composable
 private fun BatteryPage(unrestricted: Boolean) {
     PageHeader(
@@ -403,7 +296,7 @@ private fun BatteryPage(unrestricted: Boolean) {
 }
 
 @Composable
-private fun DonePage(prefs: Prefs, protectionOn: Boolean, provider: DnsProvider, privateDns: PrivateDnsMode, accessibilityOn: Boolean, scheduleLocked: Boolean) {
+private fun DonePage(prefs: Prefs, protectionOn: Boolean, provider: DnsProvider, privateDns: PrivateDnsMode) {
     val updating = UpdateStatus.running
     val domains = remember(updating) { prefs.listsEntryCount }
     PageHeader(
@@ -423,10 +316,6 @@ private fun DonePage(prefs: Prefs, protectionOn: Boolean, provider: DnsProvider,
         )
         GroupDivider()
         SummaryRow("Private DNS", if (privateDns.bypassesHush) "Needs changing" else "OK", !privateDns.bypassesHush)
-        GroupDivider()
-        SummaryRow("Night lock", if (accessibilityOn) "Ready" else "Not set up", accessibilityOn)
-        GroupDivider()
-        SummaryRow("Quiet hours", if (scheduleLocked) "Locked" else "Not set", scheduleLocked)
     }
 }
 

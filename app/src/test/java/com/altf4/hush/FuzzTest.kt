@@ -129,8 +129,8 @@ class FuzzTest {
         val sites = SocialSites.all.map { it.id }
         val valid = SettingsBackup.encode(
             SettingsSnapshot(
-                theme = ThemeMode.Dark, nightEnabled = true, nightStart = 1380, nightEnd = 360, nightDays = 127,
-                strict = false, apps = setOf("com.example.app"), social = sites.associateWith { SocialMode.Off },
+                theme = ThemeMode.Dark,
+                social = sites.associateWith { SocialMode.Off },
                 custom = setOf("example.com"), allowed = setOf("bank.example"), regexBlock = setOf("^ads[0-9]+\\."),
                 regexAllow = emptySet(), lists = emptySet(), uncloak = true, rebinding = true, bypass = false, weekly = true,
             ),

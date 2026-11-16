@@ -33,6 +33,7 @@ class SocialSitesTest {
     @Test fun socialModeFallsBackToOff() {
         assertEquals(SocialMode.Off, SocialMode.fromKey(null))
         assertEquals(SocialMode.Off, SocialMode.fromKey("nonsense"))
-        assertEquals(SocialMode.Night, SocialMode.fromKey("night"))
+        assertEquals(SocialMode.Off, SocialMode.fromKey("night"))
+        assertEquals(SocialMode.Always, SocialMode.fromKey("always"))
     }
 }

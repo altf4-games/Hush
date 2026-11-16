@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Hush</string>
-    <string name="accessibility_description">Closes the apps you choose during quiet hours. It only notices which app opened; it cannot read anything on screen.</string>
     <string name="widget_description">Blocked lookups today, with a switch for site blocking.</string>
     <string name="widget_blocked_today">blocked today</string>
     <string name="widget_label_blocked">blocked</string>

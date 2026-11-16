@@ -67,11 +67,10 @@ fun BackupCard(prefs: Prefs, onRestored: () -> Unit) {
                 var restored = false
                 BackupStatus.message = when (outcome) {
                     is BackupResult.Refused -> "Not loaded: ${outcome.reason}"
-                    is BackupResult.Ok -> if (prefs.restore(outcome.snapshot)) {
+                    is BackupResult.Ok -> {
+                        prefs.restore(outcome.snapshot)
                         restored = true
                         "Settings loaded"
-                    } else {
-                        "Not loaded: settings are locked until quiet hours end"
                     }
                 }
                 if (restored) main.post { onRestored() }
